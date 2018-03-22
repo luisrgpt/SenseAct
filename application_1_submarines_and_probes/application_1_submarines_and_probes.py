@@ -1,10 +1,8 @@
-
 #!/usr/bin/python3
 
 import csv
 import queue
 import threading
-import time
 
 ###############################################################################
 # World
@@ -13,7 +11,7 @@ import time
 # - list of locations
 #
 
-log_path = "/vagrant/user_interface_1_wpf/bin/x86/Debug/AppX/"
+log_path = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
 
 class world:
     locations = {}
@@ -59,11 +57,11 @@ class movement_handler(log_handler):
         self.state.movement()
 
 class movable:
-    def no_movement(self):
+    def no_movement():
         pass
 
     def __init__(self, id, location, movement = no_movement):
-        self.id = id
+        self.id = str(id)
         world.locations[self] = location
         self.movement = movement
         movement_handler(self).start()
@@ -124,7 +122,7 @@ class decidable:
 
     def __init__(self, strategy = no_strategy):
         self.strategy = strategy
-        awareness_handler(self).start()
+        strategy_handler(self).start()
 
     def __hash__(self):
         return hash(self.id)
@@ -156,10 +154,15 @@ class probe(movable, awareable, decidable):
         # Send measurement
         world.network.put(distance)
         # Repeat strategy
-        threading.Timer(1, probe.strategy).start()
+        threading.Timer(1, self.strategy).start()
 
     def __init__(self, id, location, cost, precision):
-        with open(log_path + id + ".csv", "w+", newline="") as csv_file:
+        movable.__init__(self, id, location)
+        awareable.__init__(self, self.awareness)
+        decidable.__init__(self, self.strategy)
+        self.cost = cost
+        self.precision = precision
+        with open(log_path + self.id + ".csv", "w+", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_content = []
             csv_content.append("blue")
@@ -170,13 +173,8 @@ class probe(movable, awareable, decidable):
             csv_content.append("00")
             csv_content.append("00")
             csv_content.append("140")
-            csv_content.append("Probe: " + id + ",Cost: " + cost + ", Value: ")
+            csv_content.append("Probe: " + self.id + ",Cost: " + f"{self.cost:04}" + ", Value: ")
             csv_writer.writerow(csv_content)
-        movable.__init__(self, id, location)
-        awareable.__init__(self, self.awareness)
-        decidable.__init__(self, self.strategy)
-        self.cost = cost
-        self.precision = precision
 
     def __hash__(self):
         return movable.__hash__(self)
@@ -217,8 +215,8 @@ class high_probe(probe) :
 class submarine(movable, awareable, decidable):
     def awareness(self):
         message = world.network.get()
-        submarine.memory.append(message)
-        threading.Timer(1, submarine.awareness).start()
+        self.memory.append(message)
+        threading.Timer(1, self.awareness).start()
 
     def __init__(self, id, location, movement, strategy, balance):
         movable.__init__(self, id, location, movement)
@@ -249,7 +247,8 @@ class defensive_submarine(submarine):
         return self.create_high_probe((1,1,1))
 
     def __init__(self, balance):
-        with open(log_path + "blue.csv", "w+", newline="") as csv_file:
+        super().__init__("blue", (0,0,0), self.no_movement, self.strategy, balance)
+        with open(log_path + self.id + ".csv", "w+", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_content = []
             csv_content.append("blue")
@@ -260,25 +259,25 @@ class defensive_submarine(submarine):
             csv_content.append("00")
             csv_content.append("40")
             csv_content.append("200")
-            csv_content.append("Submarine: blue,Balance: " + f"{balance:04}")
+            csv_content.append("Submarine: blue,Balance: " + f"{self.balance:04}")
             csv_writer.writerow(csv_content)
-        super().__init__("blue", (0,0,0), self.no_movement, self.strategy, balance)
 
     def __hash__(self):
         return super().__hash__()
 
 class offensive_submarine(submarine):
     def move_to_submarine(self):
-        current_location = world.locations[self.state]
+        current_location = world.locations[self]
         next_location = current_location
-        world.locations[self.state] = next_location
-        threading.Timer(1, submarine.movement, submarine).start()
+        world.locations[self] = next_location
+        threading.Timer(1, self.move_to_submarine).start()
 
     def hack_random_probe(self):
         print("sls")
 
     def __init__(self, location):
-        with open(log_path + "red.csv", "w+", newline="") as csv_file:
+        super().__init__("red", (0,0,0), self.move_to_submarine, self.hack_random_probe, 100)
+        with open(log_path + self.id + ".csv", "w+", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_content = []
             csv_content.append("red")
@@ -291,7 +290,6 @@ class offensive_submarine(submarine):
             csv_content.append("200")
             csv_content.append("Submarine: red,Balance: 100")
             csv_writer.writerow(csv_content)
-        super().__init__("red", (0,0,0), self.move_to_submarine, self.hack_random_probe, 100)
 
     def __hash__(self):
         return super().__hash__()
