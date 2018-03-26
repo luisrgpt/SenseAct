@@ -2,6 +2,7 @@
 
 import csv
 import queue
+import time
 import threading
 
 ###############################################################################
@@ -11,30 +12,16 @@ import threading
 # - list of locations
 #
 
-log_path = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
+current_csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
+log_csv_prefix = current_csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S_"))
+
+current_csv_suffix = "_current.csv"
+log_csv_suffix = "_log.csv"
 
 class world:
     locations = {}
     network = queue.Queue()
     lock = threading.Lock()
-
-class log_handler(threading.Thread):
-    def __init__(self, state):
-        super().__init__()
-        self.state = state
-
-    def run(self):
-        world.lock.acquire()
-        csv_content = ""
-        with open(log_path + self.state.id + ".csv", "r", newline="") as csv_file:
-            csv_reader = csv.reader(csv_file)
-            for csv_line in csv_reader:
-                csv_content = csv_line
-                break
-        with open(log_path + self.state.id + ".csv", "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        world.lock.release()
 
 ###############################################################################
 # Movable
@@ -48,12 +35,23 @@ class log_handler(threading.Thread):
 # - moves according to previous location
 #
 
-class movement_handler(log_handler):
+class movement_handler(threading.Thread):
     def __init__(self, state):
-        super().__init__(state)
+        super().__init__()
+        self.state = state
 
     def run(self):
-        super().run()
+        csv_content = ""
+        world.lock.acquire()
+        with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
+            csv_reader = csv.reader(csv_file)
+            for csv_line in csv_reader:
+                csv_content = csv_line
+                break
+        with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(csv_content)
+        world.lock.release()
         self.state.movement()
 
 class movable:
@@ -79,12 +77,23 @@ class movable:
 # Behaviour:
 # - listens to external messages
 
-class awareness_handler(log_handler):
+class awareness_handler(threading.Thread):
     def __init__(self, state):
-        super().__init__(state)
+        super().__init__()
+        self.state = state
 
     def run(self):
-        super().run()
+        csv_content = ""
+        world.lock.acquire()
+        with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
+            csv_reader = csv.reader(csv_file)
+            for csv_line in csv_reader:
+                csv_content = csv_line
+                break
+        with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(csv_content)
+        world.lock.release()
         self.state.awareness()
 
 class awareable:
@@ -108,12 +117,23 @@ class awareable:
 # Behaviour:
 # - chooses actions
 
-class strategy_handler(log_handler):
+class strategy_handler(threading.Thread):
     def __init__(self, state):
-        super().__init__(state)
+        super().__init__()
+        self.state = state
 
     def run(self):
-        super().run()
+        csv_content = ""
+        world.lock.acquire()
+        with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
+            csv_reader = csv.reader(csv_file)
+            for csv_line in csv_reader:
+                csv_content = csv_line
+                break
+        with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(csv_content)
+        world.lock.release()
         self.state.strategy()
 
 class decidable:
@@ -156,25 +176,30 @@ class probe(movable, awareable, decidable):
         # Repeat strategy
         threading.Timer(1, self.strategy).start()
 
-    def __init__(self, id, location, cost, precision):
+    def __init__(self, id, location, owner_id, cost, precision):
+        self.owner_id = str(owner_id)
+        self.cost = cost
+        self.precision = precision
+        csv_content = []
+        csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
+        csv_content.append("probe")
+        csv_content.append(str(id))
+        csv_content.append(str(owner_id))
+        csv_content.append(location)
+        csv_content.append(f"{self.cost:03}")
+        csv_content.append(f"{self.precision:03}")
+        csv_content.append("-")
+        world.lock.acquire()
+        with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(csv_content)
+        with open(log_csv_prefix + str(id) + log_csv_suffix, "w+", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(csv_content)
+        world.lock.release()
         movable.__init__(self, id, location)
         awareable.__init__(self, self.awareness)
         decidable.__init__(self, self.strategy)
-        self.cost = cost
-        self.precision = precision
-        with open(log_path + self.id + ".csv", "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_content = []
-            csv_content.append("blue")
-            csv_content.append("blue")
-            csv_content.append("left")
-            csv_content.append("250")
-            csv_content.append("40")
-            csv_content.append("00")
-            csv_content.append("00")
-            csv_content.append("140")
-            csv_content.append("Probe: " + self.id + ",Cost: " + f"{self.cost:04}" + ", Value: ")
-            csv_writer.writerow(csv_content)
 
     def __hash__(self):
         return movable.__hash__(self)
@@ -182,15 +207,15 @@ class probe(movable, awareable, decidable):
 #f"{self.super().id:03}" + "," + f"{self.cost:02}" + "," + f"{self.precision:02}"
 
 class low_probe(probe) :
-    def __init__(self, id, location):
-        super().__init__(id, location, 1, 5)
+    def __init__(self, id, location, owner_id):
+        super().__init__(id, location, owner_id, 1, 5)
 
     def __hash__(self):
         return super().__hash__()
 
 class high_probe(probe) :
-    def __init__(self, id, location):
-        super().__init__(id, location, 10, 2)
+    def __init__(self, id, location, owner_id):
+        super().__init__(id, location, owner_id, 10, 2)
 
     def __hash__(self):
         return super().__hash__()
@@ -219,11 +244,23 @@ class submarine(movable, awareable, decidable):
         threading.Timer(1, self.awareness).start()
 
     def __init__(self, id, location, movement, strategy, balance):
+        self.balance = balance
+        self.probes = []
+        csv_content = []
+        csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
+        csv_content.append("submarine")
+        csv_content.append(str(id))
+        csv_content.append(str(id))
+        csv_content.append(location)
+        csv_content.append(f"{self.balance:04}")
+        world.lock.acquire()
+        with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(csv_content)
+        world.lock.release()
         movable.__init__(self, id, location, movement)
         awareable.__init__(self, self.awareness)
         decidable.__init__(self, strategy)
-        self.balance = balance
-        self.probes = []
 
     def __hash__(self):
         return movable.__hash__(self)
@@ -238,29 +275,26 @@ class defensive_submarine(submarine):
         return self
 
     def create_high_probe(self, location):
-        return self.create_probe(high_probe(len(self.probes), location))
+        return self.create_probe(high_probe(len(self.probes), location, self.id))
 
     def create_low_probe(self, location):
-        return self.create_probe(low_probe(len(self.probes), location))
+        return self.create_probe(low_probe(len(self.probes), location, self.id))
 
     def strategy(self):
-        return self.create_high_probe((1,1,1))
+        if(len(world.locations) == 2):
+            self.create_high_probe((1,1,1))
+        if(len(world.locations) == 3):
+            self.create_low_probe((1,2,1))
+            self.create_high_probe((4,2,1))
+        if(len(world.locations) == 5):
+            self.create_low_probe((1,2,3))
+        if(len(world.locations) == 6):
+            self.create_low_probe((1,5,3))
+            self.create_low_probe((-1,2,3))
+        threading.Timer(1, self.strategy).start()
 
     def __init__(self, balance):
-        super().__init__("blue", (0,0,0), self.no_movement, self.strategy, balance)
-        with open(log_path + self.id + ".csv", "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_content = []
-            csv_content.append("blue")
-            csv_content.append("blue")
-            csv_content.append("left")
-            csv_content.append("40")
-            csv_content.append("40")
-            csv_content.append("00")
-            csv_content.append("40")
-            csv_content.append("200")
-            csv_content.append("Submarine: blue,Balance: " + f"{self.balance:04}")
-            csv_writer.writerow(csv_content)
+        super().__init__("blu", (0,0,0), self.no_movement, self.strategy, balance)
 
     def __hash__(self):
         return super().__hash__()
@@ -277,19 +311,6 @@ class offensive_submarine(submarine):
 
     def __init__(self, location):
         super().__init__("red", (0,0,0), self.move_to_submarine, self.hack_random_probe, 100)
-        with open(log_path + self.id + ".csv", "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_content = []
-            csv_content.append("red")
-            csv_content.append("red")
-            csv_content.append("right")
-            csv_content.append("00")
-            csv_content.append("40")
-            csv_content.append("40")
-            csv_content.append("40")
-            csv_content.append("200")
-            csv_content.append("Submarine: red,Balance: 100")
-            csv_writer.writerow(csv_content)
 
     def __hash__(self):
         return super().__hash__()
