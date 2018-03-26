@@ -1,7 +1,10 @@
 #!/usr/bin/python3
 
 import csv
+import functools
+import math
 import queue
+import random
 import time
 import threading
 
@@ -42,16 +45,21 @@ class movement_handler(threading.Thread):
 
     def run(self):
         csv_content = ""
-        world.lock.acquire()
-        with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
-            csv_reader = csv.reader(csv_file)
-            for csv_line in csv_reader:
-                csv_content = csv_line
+        while True:
+            try:
+
+                with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
+                    csv_reader = csv.reader(csv_file)
+                    for csv_line in csv_reader:
+                        csv_content = csv_line
+                        break
+                with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+
                 break
-        with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        world.lock.release()
+            except Exception:
+                time.sleep(0.1)
         self.state.movement()
 
 class movable:
@@ -59,8 +67,8 @@ class movable:
         pass
 
     def __init__(self, id, location, movement = no_movement):
-        self.id = str(id)
-        world.locations[self] = location
+        self.id : str = str(id)
+        world.locations[hash(self.id)] = location
         self.movement = movement
         movement_handler(self).start()
 
@@ -84,16 +92,21 @@ class awareness_handler(threading.Thread):
 
     def run(self):
         csv_content = ""
-        world.lock.acquire()
-        with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
-            csv_reader = csv.reader(csv_file)
-            for csv_line in csv_reader:
-                csv_content = csv_line
+        while True:
+            try:
+
+                with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
+                    csv_reader = csv.reader(csv_file)
+                    for csv_line in csv_reader:
+                        csv_content = csv_line
+                        break
+                with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+
                 break
-        with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        world.lock.release()
+            except Exception:
+                time.sleep(0.1)
         self.state.awareness()
 
 class awareable:
@@ -123,17 +136,6 @@ class strategy_handler(threading.Thread):
         self.state = state
 
     def run(self):
-        csv_content = ""
-        world.lock.acquire()
-        with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
-            csv_reader = csv.reader(csv_file)
-            for csv_line in csv_reader:
-                csv_content = csv_line
-                break
-        with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        world.lock.release()
         self.state.strategy()
 
 class decidable:
@@ -169,42 +171,79 @@ class probe(movable, awareable, decidable):
         pass
 
     def strategy(self):
-        # Get measurement
-        distance = world.locations[self]
+        # Get locations
+        location = world.locations[hash(self.id)]
+        red_location = world.locations[hash("red")]
+        # Calculate measurements
+        measurement = math.sqrt(functools.reduce(lambda acc, value: acc + (location[value] - red_location[value])**2, [0, 1, 2], 0))
+        measurement_with_error = measurement + random.uniform(-self.precision, self.precision)
+        
+        self.value = measurement_with_error if measurement_with_error > 0 else 0
         # Send measurement
-        world.network.put(distance)
+        world.network.put((self.id, self.value))
+
+        # Read precious log
+        csv_content = ""
+        while True:
+            try:
+                with open(current_csv_prefix + self.id + current_csv_suffix, "r", newline="") as csv_file:
+                    csv_reader = csv.reader(csv_file)
+                    for csv_line in csv_reader:
+                        csv_content = csv_line
+                        break
+                csv_content[0] = time.strftime("%Y_%m_%d_%H_%M_%S")
+                csv_content[7] = str(self.value)
+
+                # Update/Append current log
+                with open(current_csv_prefix + self.id + current_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+                with open(log_csv_prefix + self.id + log_csv_suffix, "a+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+
+                break
+            except Exception:
+                time.sleep(0.1)
+
         # Repeat strategy
         threading.Timer(1, self.strategy).start()
 
     def __init__(self, id, location, owner_id, cost, precision):
         self.owner_id = str(owner_id)
-        self.cost = cost
-        self.precision = precision
+        self.cost : int = cost
+        self.precision : int = precision
+        self.value : int = -1
         csv_content = []
         csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
         csv_content.append("probe")
-        csv_content.append(str(id))
-        csv_content.append(str(owner_id))
+        csv_content.append(f"{id:03}")
+        csv_content.append(owner_id)
         csv_content.append(location)
         csv_content.append(f"{self.cost:03}")
         csv_content.append(f"{self.precision:03}")
-        csv_content.append("-")
-        world.lock.acquire()
-        with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        with open(log_csv_prefix + str(id) + log_csv_suffix, "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        world.lock.release()
+        csv_content.append(str(self.value))
+
+        while True:
+            try:
+
+                with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+                with open(log_csv_prefix + str(id) + log_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+
+                break
+            except Exception:
+                time.sleep(0.1)
+
         movable.__init__(self, id, location)
         awareable.__init__(self, self.awareness)
         decidable.__init__(self, self.strategy)
 
     def __hash__(self):
         return movable.__hash__(self)
-
-#f"{self.super().id:03}" + "," + f"{self.cost:02}" + "," + f"{self.precision:02}"
 
 class low_probe(probe) :
     def __init__(self, id, location, owner_id):
@@ -253,11 +292,18 @@ class submarine(movable, awareable, decidable):
         csv_content.append(str(id))
         csv_content.append(location)
         csv_content.append(f"{self.balance:04}")
-        world.lock.acquire()
-        with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(csv_content)
-        world.lock.release()
+
+        while True:
+            try:
+
+                with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+
+                break
+            except Exception:
+                time.sleep(0.1)
+
         movable.__init__(self, id, location, movement)
         awareable.__init__(self, self.awareness)
         decidable.__init__(self, strategy)
@@ -282,7 +328,7 @@ class defensive_submarine(submarine):
 
     def strategy(self):
         if(len(world.locations) == 2):
-            self.create_high_probe((1,1,1))
+            self.create_high_probe((5,0,0))
         if(len(world.locations) == 3):
             self.create_low_probe((1,2,1))
             self.create_high_probe((4,2,1))
@@ -293,30 +339,30 @@ class defensive_submarine(submarine):
             self.create_low_probe((-1,2,3))
         threading.Timer(1, self.strategy).start()
 
-    def __init__(self, balance):
-        super().__init__("blu", (0,0,0), self.no_movement, self.strategy, balance)
+    def __init__(self, location, balance):
+        super().__init__("blu", location, self.no_movement, self.strategy, balance)
 
     def __hash__(self):
         return super().__hash__()
 
 class offensive_submarine(submarine):
     def move_to_submarine(self):
-        current_location = world.locations[self]
+        current_location = world.locations[hash(self.id)]
         next_location = current_location
-        world.locations[self] = next_location
+        world.locations[hash(self.id)] = next_location
         threading.Timer(1, self.move_to_submarine).start()
 
     def hack_random_probe(self):
         print("sls")
 
-    def __init__(self, location):
-        super().__init__("red", (0,0,0), self.move_to_submarine, self.hack_random_probe, 100)
+    def __init__(self, location, balance):
+        super().__init__("red", location, self.move_to_submarine, self.hack_random_probe, 100)
 
     def __hash__(self):
         return super().__hash__()
 
-blu_submarine = defensive_submarine(100)
-red_submarine = offensive_submarine((10,10,10))
+blu_submarine = defensive_submarine((0,0,0), 100)
+red_submarine = offensive_submarine((10,0,0), 100)
 
 #write("red",  "red_submarine,red,right,00,40,40,40,200,Submarine:  Red,Balance:    100")
 

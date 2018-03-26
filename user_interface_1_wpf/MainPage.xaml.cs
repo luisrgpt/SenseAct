@@ -28,7 +28,7 @@ namespace user_interface_1_wpf
 
             Debug.WriteLine(String.Join("",
             Directory
-                .EnumerateFiles(Path.GetFullPath(path_name), "*.csv", SearchOption.TopDirectoryOnly)
+                .EnumerateFiles(Path.GetFullPath(path_name), "*_current.csv", SearchOption.TopDirectoryOnly)
                 .Select(file_name => {
                     OnChangedFileSystemEvent(this, new FileSystemEventArgs(
                         WatcherChangeTypes.Changed,
@@ -52,26 +52,36 @@ namespace user_interface_1_wpf
         private void OnChangedFileSystemEvent(object source, FileSystemEventArgs args)
         {
             //Debug.WriteLine(args.FullPath);
-            Thread.Sleep(100);
-            using (StreamReader reader = new StreamReader(args.FullPath))
+            while(true)
             {
-                String line = reader.ReadLine();
-
-                if (line.Equals(""))
+                try
                 {
-                    return;
-                }
+                    using (StreamReader reader = new StreamReader(args.FullPath))
+                    {
+                        String line = reader.ReadLine();
 
-                String[] parameters = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))").Split(line);
-                Task.Factory.StartNew(() => Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { lock (this) { UpdatePage(parameters); } }));
+                        if (line.Equals(""))
+                        {
+                            return;
+                        }
+
+                        String[] parameters = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))").Split(line);
+                        Task.Factory.StartNew(() => Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => UpdatePage(parameters)));
+                    }
+
+                    break;
+                }
+                catch (Exception)
+                {
+                    Thread.Sleep(100);
+                }
             }
         }
 
         private void OnDeletedFileSystemEvent(object source, FileSystemEventArgs args)
         {
             //Debug.WriteLine(args.FullPath);
-            Thread.Sleep(100);
-            Task.Factory.StartNew(() => Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => { lock (this) { DeletePage(args.FullPath); } }));
+            Task.Factory.StartNew(() => Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => DeletePage(args.FullPath)));
 
         }
 
@@ -90,7 +100,7 @@ namespace user_interface_1_wpf
             + "\nLocal: " + parameters[04].Replace("\"", "")
             + "\nCost:  " + parameters[05]
             + "\nUncer: " + parameters[06]
-            + "\nValue: " + parameters[07];
+            + "\nValue: " + Math.Round(float.Parse(parameters[07]), 6);
         private Thickness probe_thickness (String[] parameters)
             => new Thickness
                 ( 250 + 210 * (Int32.Parse(parameters[02]) / 4)
