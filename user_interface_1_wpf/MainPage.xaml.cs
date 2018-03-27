@@ -94,7 +94,8 @@ namespace user_interface_1_wpf
         private String submarine_text(String[] parameters)
             => parameters[01] + ": " + parameters[02]
             + "\nLocal: " + parameters[04].Replace("\"", "")
-            + "\nBalan: " + parameters[05].Replace("\"", "");
+            + "\nBalan: " + parameters[05].Replace("\"", "")
+            + (parameters.Count() > 06 ? "\nProbes:\n - " + String.Join("\n - ", parameters.Skip(06)) : "");
         private String probe_text (String[] parameters)
             => parameters[01] + ": " + parameters[02]
             + "\nLocal: " + parameters[04].Replace("\"", "")

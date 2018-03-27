@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import asyncio
 import csv
 import functools
 import math
@@ -16,15 +17,51 @@ import threading
 #
 
 current_csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
-log_csv_prefix = current_csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S_"))
-
 current_csv_suffix = "_current.csv"
-log_csv_suffix = "_log.csv"
+
+log_file_name = current_csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + "_log.csv"
 
 class world:
     locations = {}
     network = queue.Queue()
-    lock = threading.Lock()
+
+###############################################################################
+# Logging
+#
+
+class logging_scheduler(threading.Thread):
+    loop = asyncio.get_event_loop()
+
+    def run(self):
+        print("test")
+        self.loop.set_debug(True)
+        self.loop.run_forever()
+        print("fail")
+
+class logging_handler(threading.Thread):
+    stack = []
+    log_content = []
+
+    def put(csv_content):
+        print(csv_content)
+        logging_handler.stack.append(csv_content)
+
+    def take_all(self):
+        logging_handler.log_content = logging_handler.stack
+        print(logging_handler.log_content)
+        logging_handler.stack = []
+
+    def run(self):
+        logging_scheduler.loop.call_soon_threadsafe(self.take_all)
+        with open(log_file_name, "a+", newline="") as log_file:
+            log_writer = csv.writer(log_file)
+            for log_line in logging_handler.log_content:
+                log_writer.writerow(log_line)
+        logging_handler.stack_content = []
+        threading.Timer(10, self.run).start()
+
+logging_scheduler().start()
+logging_handler().start()
 
 ###############################################################################
 # Movable
@@ -198,13 +235,11 @@ class probe(movable, awareable, decidable):
                 with open(current_csv_prefix + self.id + current_csv_suffix, "w+", newline="") as csv_file:
                     csv_writer = csv.writer(csv_file)
                     csv_writer.writerow(csv_content)
-                with open(log_csv_prefix + self.id + log_csv_suffix, "a+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
 
                 break
             except Exception:
                 time.sleep(0.1)
+        logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
 
         # Repeat strategy
         threading.Timer(1, self.strategy).start()
@@ -224,19 +259,38 @@ class probe(movable, awareable, decidable):
         csv_content.append(f"{self.precision:03}")
         csv_content.append(str(self.value))
 
+        logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
+
         while True:
             try:
 
                 with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
                     csv_writer = csv.writer(csv_file)
                     csv_writer.writerow(csv_content)
-                with open(log_csv_prefix + str(id) + log_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-
                 break
             except Exception:
                 time.sleep(0.1)
+
+        while True:
+            try:
+
+                with open(current_csv_prefix + self.owner_id + current_csv_suffix, "r", newline="") as csv_file:
+                    csv_reader = csv.reader(csv_file)
+                    for csv_line in csv_reader:
+                        csv_content = csv_line
+                        break
+                csv_content[0] = time.strftime("%Y_%m_%d_%H_%M_%S")
+                csv_content.append(f"{id:03}")
+
+
+                # Update/Append current log
+                with open(current_csv_prefix + self.owner_id + current_csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_content)
+                break
+            except Exception:
+                time.sleep(0.1)
+        logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
 
         movable.__init__(self, id, location)
         awareable.__init__(self, self.awareness)
