@@ -4,6 +4,7 @@ import asyncio
 import csv
 import functools
 import math
+import os
 import queue
 import random
 import time
@@ -21,9 +22,15 @@ csv_suffix = "_current.csv"
 
 log_file_name = csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + "_log.csv"
 
+files = [ file for file in os.listdir(csv_prefix) if file.endswith(csv_suffix) ]
+for file in files:
+    os.remove(os.path.join(csv_prefix, file))
+
 class world:
     locations = {}
-    network = queue.Queue()
+    network = []
+    darknet = []
+    lock = threading.Lock()
 
 ###############################################################################
 # Logging
@@ -202,8 +209,10 @@ class decidable:
 
 class probe(movable, awareable, decidable):
     def awareness(self):
-        # Nothing
-        pass
+        if(int(self.id) in world.darknet):
+            self.owner_id = "red"
+            logging_handler.update(self, [(3, self.owner_id)])
+        threading.Timer(1, self.awareness).start()
 
     def strategy(self):
         # Get locations
@@ -215,7 +224,9 @@ class probe(movable, awareable, decidable):
         
         self.value = measurement_with_error if measurement_with_error > 0 else 0
         # Send measurement
-        world.network.put((self.id, self.value))
+        world.lock.acquire()
+        world.network.append((self.id, self.value))
+        world.lock.release()
 
         # Update log
         # logging_scheduler.loop.call_soon_threadsafe(logging_handler.update, [(1, self.type_id), (2, self.id), (0, time.strftime("%Y_%m_%d_%H_%M_%S")), (7, str(self.value))])
@@ -243,9 +254,6 @@ class probe(movable, awareable, decidable):
         # Create log
         # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
         logging_handler.put(csv_content)
-        # Update owner's log
-        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.update, [(1, "submarine"), (2, self.owner_id), (0, timestamp), (-1, str(id))])
-        logging_handler.update(owner, [(str(id))])
 
         movable.__init__(self, "probe", id, location)
         awareable.__init__(self, self.awareness)
@@ -287,8 +295,12 @@ class high_probe(probe) :
 
 class submarine(movable, awareable, decidable):
     def awareness(self):
-        message = world.network.get()
-        self.memory.append(message)
+        world.lock.acquire()
+        messages = world.network.copy()
+        world.network = []
+        world.lock.release()
+
+        self.memory += messages
         threading.Timer(1, self.awareness).start()
 
     def __init__(self, id, location, movement, strategy, balance):
@@ -320,6 +332,7 @@ class defensive_submarine(submarine):
     def create_probe(self, probe):
         self.balance -= probe.cost
         self.probes.append(probe)
+        logging_handler.update(self, [(4, str(self.balance)), (probe.id)])
         return self
 
     def create_high_probe(self, location):
@@ -356,7 +369,9 @@ class offensive_submarine(submarine):
         threading.Timer(1, self.move_to_submarine).start()
 
     def hack_random_probe(self):
-        pass
+        time.sleep(9)
+        world.darknet.append(random.randint(0, 5))
+        threading.Timer(1, self.hack_random_probe).start()
 
     def __init__(self, location, balance):
         super().__init__("red", location, self.move_to_submarine, self.hack_random_probe, 100)
@@ -366,3 +381,4 @@ class offensive_submarine(submarine):
 
 blu_submarine = defensive_submarine((0,0,0), 100)
 red_submarine = offensive_submarine((10,0,0), 100)
+
