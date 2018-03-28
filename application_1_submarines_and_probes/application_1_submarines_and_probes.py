@@ -16,10 +16,10 @@ import threading
 # - list of locations
 #
 
-current_csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
-current_csv_suffix = "_current.csv"
+csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
+csv_suffix = "_current.csv"
 
-log_file_name = current_csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + "_log.csv"
+log_file_name = csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + "_log.csv"
 
 class world:
     locations = {}
@@ -29,38 +29,67 @@ class world:
 # Logging
 #
 
-class logging_scheduler(threading.Thread):
-    loop = asyncio.get_event_loop()
+#class logging_scheduler(threading.Thread):
+#    loop = asyncio.get_event_loop()
 
-    def run(self):
-        print("test")
-        self.loop.set_debug(True)
-        self.loop.run_forever()
-        print("fail")
+#    def run(self):
+#        self.loop.run_forever()
 
 class logging_handler(threading.Thread):
     stack = []
     log_content = []
 
+    dictionary = {}
+    csv_content = []
+
+    lock = threading.Lock()
+
     def put(csv_content):
-        print(csv_content)
-        logging_handler.stack.append(csv_content)
+        logging_handler.lock.acquire()
+        logging_handler.stack.append(csv_content.copy())
+        logging_handler.dictionary[csv_content[1] + "_" + csv_content[2]] = csv_content.copy()
+        logging_handler.lock.release()
+
+    def update(submarine_or_probe, csv_changes = []):
+        csv_changes.append((0, time.strftime("%Y_%m_%d_%H_%M_%S")))
+
+        logging_handler.lock.acquire()
+        csv_content = logging_handler.dictionary[submarine_or_probe.type_id + "_" + submarine_or_probe.id]
+        
+        for csv_change in csv_changes:
+            if len(csv_change) == 1:
+                csv_content.append(csv_change[0])
+            elif len(csv_change) == 2:
+                csv_content[csv_change[0]] = csv_change[1]
+        logging_handler.lock.release()
+
+        logging_handler.put(csv_content)
 
     def take_all(self):
-        logging_handler.log_content = logging_handler.stack
-        print(logging_handler.log_content)
+        logging_handler.lock.acquire()
+        logging_handler.log_content = logging_handler.stack.copy()
         logging_handler.stack = []
 
+        logging_handler.csv_content = logging_handler.dictionary.copy()
+        logging_handler.lock.release()
+
     def run(self):
-        logging_scheduler.loop.call_soon_threadsafe(self.take_all)
+        # logging_scheduler.loop.call_soon_threadsafe(self.take_all)
+        self.take_all()
+
         with open(log_file_name, "a+", newline="") as log_file:
             log_writer = csv.writer(log_file)
-            for log_line in logging_handler.log_content:
-                log_writer.writerow(log_line)
-        logging_handler.stack_content = []
-        threading.Timer(10, self.run).start()
+            for log_row in logging_handler.log_content:
+                log_writer.writerow(log_row)
 
-logging_scheduler().start()
+        for csv_id, csv_row in logging_handler.csv_content.items():
+            with open(csv_prefix + csv_id + csv_suffix, "w+", newline="") as csv_file:
+                csv_writer = csv.writer(csv_file)
+                csv_writer.writerow(csv_row)
+
+        threading.Timer(1, self.run).start()
+
+# logging_scheduler().start()
 logging_handler().start()
 
 ###############################################################################
@@ -81,30 +110,15 @@ class movement_handler(threading.Thread):
         self.state = state
 
     def run(self):
-        csv_content = ""
-        while True:
-            try:
-
-                with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
-                    csv_reader = csv.reader(csv_file)
-                    for csv_line in csv_reader:
-                        csv_content = csv_line
-                        break
-                with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-
-                break
-            except Exception:
-                time.sleep(0.1)
         self.state.movement()
 
 class movable:
     def no_movement():
         pass
 
-    def __init__(self, id, location, movement = no_movement):
-        self.id : str = str(id)
+    def __init__(self, type_id, id, location, movement = no_movement):
+        self.type_id = type_id
+        self.id = str(id)
         world.locations[hash(self.id)] = location
         self.movement = movement
         movement_handler(self).start()
@@ -128,22 +142,6 @@ class awareness_handler(threading.Thread):
         self.state = state
 
     def run(self):
-        csv_content = ""
-        while True:
-            try:
-
-                with open(current_csv_prefix + self.state.id + current_csv_suffix, "r", newline="") as csv_file:
-                    csv_reader = csv.reader(csv_file)
-                    for csv_line in csv_reader:
-                        csv_content = csv_line
-                        break
-                with open(current_csv_prefix + self.state.id + current_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-
-                break
-            except Exception:
-                time.sleep(0.1)
         self.state.awareness()
 
 class awareable:
@@ -219,80 +217,37 @@ class probe(movable, awareable, decidable):
         # Send measurement
         world.network.put((self.id, self.value))
 
-        # Read precious log
-        csv_content = ""
-        while True:
-            try:
-                with open(current_csv_prefix + self.id + current_csv_suffix, "r", newline="") as csv_file:
-                    csv_reader = csv.reader(csv_file)
-                    for csv_line in csv_reader:
-                        csv_content = csv_line
-                        break
-                csv_content[0] = time.strftime("%Y_%m_%d_%H_%M_%S")
-                csv_content[7] = str(self.value)
-
-                # Update/Append current log
-                with open(current_csv_prefix + self.id + current_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-
-                break
-            except Exception:
-                time.sleep(0.1)
-        logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
+        # Update log
+        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.update, [(1, self.type_id), (2, self.id), (0, time.strftime("%Y_%m_%d_%H_%M_%S")), (7, str(self.value))])
+        logging_handler.update(self, [(7, str(self.value))])
 
         # Repeat strategy
         threading.Timer(1, self.strategy).start()
 
-    def __init__(self, id, location, owner_id, cost, precision):
-        self.owner_id = str(owner_id)
+    def __init__(self, id, location, owner, cost, precision):
+        self.owner_id = str(owner.id)
         self.cost : int = cost
         self.precision : int = precision
         self.value : int = -1
+        timestamp = time.strftime("%Y_%m_%d_%H_%M_%S")
         csv_content = []
-        csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
+        csv_content.append(timestamp)
         csv_content.append("probe")
-        csv_content.append(f"{id:03}")
-        csv_content.append(owner_id)
+        csv_content.append(str(id))
+        csv_content.append(self.owner_id)
         csv_content.append(location)
-        csv_content.append(f"{self.cost:03}")
-        csv_content.append(f"{self.precision:03}")
+        csv_content.append(str(self.cost))
+        csv_content.append(str(self.precision))
         csv_content.append(str(self.value))
 
-        logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
+        # Create log
+        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
+        logging_handler.put(csv_content)
+        # Update owner's log
+        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.update, [(1, "submarine"), (2, self.owner_id), (0, timestamp), (-1, str(id))])
+        logging_handler.update(owner, [(str(id))])
 
-        while True:
-            try:
-
-                with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-                break
-            except Exception:
-                time.sleep(0.1)
-
-        while True:
-            try:
-
-                with open(current_csv_prefix + self.owner_id + current_csv_suffix, "r", newline="") as csv_file:
-                    csv_reader = csv.reader(csv_file)
-                    for csv_line in csv_reader:
-                        csv_content = csv_line
-                        break
-                csv_content[0] = time.strftime("%Y_%m_%d_%H_%M_%S")
-                csv_content.append(f"{id:03}")
-
-
-                # Update/Append current log
-                with open(current_csv_prefix + self.owner_id + current_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-                break
-            except Exception:
-                time.sleep(0.1)
-        logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
-
-        movable.__init__(self, id, location)
+        movable.__init__(self, "probe", id, location)
         awareable.__init__(self, self.awareness)
         decidable.__init__(self, self.strategy)
 
@@ -300,15 +255,15 @@ class probe(movable, awareable, decidable):
         return movable.__hash__(self)
 
 class low_probe(probe) :
-    def __init__(self, id, location, owner_id):
-        super().__init__(id, location, owner_id, 1, 5)
+    def __init__(self, id, location, owner):
+        super().__init__(id, location, owner, 1, 5)
 
     def __hash__(self):
         return super().__hash__()
 
 class high_probe(probe) :
-    def __init__(self, id, location, owner_id):
-        super().__init__(id, location, owner_id, 10, 2)
+    def __init__(self, id, location, owner):
+        super().__init__(id, location, owner, 10, 2)
 
     def __hash__(self):
         return super().__hash__()
@@ -345,20 +300,13 @@ class submarine(movable, awareable, decidable):
         csv_content.append(str(id))
         csv_content.append(str(id))
         csv_content.append(location)
-        csv_content.append(f"{self.balance:04}")
+        csv_content.append(str(self.balance))
 
-        while True:
-            try:
+        # Create log
+        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
+        logging_handler.put(csv_content)
 
-                with open(current_csv_prefix + str(id) + current_csv_suffix, "w+", newline="") as csv_file:
-                    csv_writer = csv.writer(csv_file)
-                    csv_writer.writerow(csv_content)
-
-                break
-            except Exception:
-                time.sleep(0.1)
-
-        movable.__init__(self, id, location, movement)
+        movable.__init__(self, "submarine", id, location, movement)
         awareable.__init__(self, self.awareness)
         decidable.__init__(self, strategy)
 
@@ -375,10 +323,10 @@ class defensive_submarine(submarine):
         return self
 
     def create_high_probe(self, location):
-        return self.create_probe(high_probe(len(self.probes), location, self.id))
+        return self.create_probe(high_probe(len(self.probes), location, self))
 
     def create_low_probe(self, location):
-        return self.create_probe(low_probe(len(self.probes), location, self.id))
+        return self.create_probe(low_probe(len(self.probes), location, self))
 
     def strategy(self):
         if(len(world.locations) == 2):
@@ -404,10 +352,11 @@ class offensive_submarine(submarine):
         current_location = world.locations[hash(self.id)]
         next_location = current_location
         world.locations[hash(self.id)] = next_location
+        #logging_handler.update([(1, self.state.type_id), (2, self.state.id)])
         threading.Timer(1, self.move_to_submarine).start()
 
     def hack_random_probe(self):
-        print("sls")
+        pass
 
     def __init__(self, location, balance):
         super().__init__("red", location, self.move_to_submarine, self.hack_random_probe, 100)
@@ -417,7 +366,3 @@ class offensive_submarine(submarine):
 
 blu_submarine = defensive_submarine((0,0,0), 100)
 red_submarine = offensive_submarine((10,0,0), 100)
-
-#write("red",  "red_submarine,red,right,00,40,40,40,200,Submarine:  Red,Balance:    100")
-
-# ",- " + ",- ".join(map(self.print_probe, self.probes))
