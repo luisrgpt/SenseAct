@@ -31,6 +31,7 @@ class world:
     network = []
     darknet = []
     lock = threading.Lock()
+    locations_lock = threading.Lock()
 
 ###############################################################################
 # Logging
@@ -126,7 +127,9 @@ class movable:
     def __init__(self, type_id, id, location, movement = no_movement):
         self.type_id = type_id
         self.id = str(id)
+        world.locations_lock.acquire()
         world.locations[hash(self.id)] = location
+        world.locations_lock.release()
         self.movement = movement
         movement_handler(self).start()
 
@@ -216,10 +219,12 @@ class probe(movable, awareable, decidable):
 
     def strategy(self):
         # Get locations
+        world.locations_lock.acquire()
         location = world.locations[hash(self.id)]
         red_location = world.locations[hash("red")]
+        world.locations_lock.release()
         # Calculate measurements
-        measurement = math.sqrt(functools.reduce(lambda acc, value: acc + (location[value] - red_location[value])**2, [0, 1, 2], 0))
+        measurement = math.sqrt(functools.reduce(lambda acc, value: acc + (location[value] - red_location[value])**2, [0, 1], 0))
         measurement_with_error = measurement + random.uniform(-self.precision, self.precision)
         
         self.value = measurement_with_error if measurement_with_error > 0 else 0
@@ -276,6 +281,13 @@ class high_probe(probe) :
     def __hash__(self):
         return super().__hash__()
 
+class perfect_probe(probe) :
+    def __init__(self, id, location, owner):
+        super().__init__(id, location, owner, 0, 0)
+
+    def __hash__(self):
+        return super().__hash__()
+
 ###############################################################################
 # Submarine
 #
@@ -301,11 +313,15 @@ class submarine(movable, awareable, decidable):
         world.lock.release()
 
         self.memory += messages
+        for message in messages:
+            self.specific_memory[hash(message[0])] = message[1]
         threading.Timer(1, self.awareness).start()
 
     def __init__(self, id, location, movement, strategy, balance):
         self.balance = balance
         self.probes = []
+        self.specific_memory = {}
+        self.value = -1
         csv_content = []
         csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
         csv_content.append("submarine")
@@ -313,6 +329,7 @@ class submarine(movable, awareable, decidable):
         csv_content.append(str(id))
         csv_content.append(location)
         csv_content.append(str(self.balance))
+        csv_content.append(str(self.value))
 
         # Create log
         # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
@@ -335,23 +352,68 @@ class defensive_submarine(submarine):
         logging_handler.update(self, [(4, str(self.balance)), (probe.id)])
         return self
 
+    def create_perfect_probe(self, location):
+        return self.create_probe(perfect_probe(len(self.probes), location, self))
+
     def create_high_probe(self, location):
         return self.create_probe(high_probe(len(self.probes), location, self))
 
     def create_low_probe(self, location):
         return self.create_probe(low_probe(len(self.probes), location, self))
 
+    def formula_1(self, x1, y1, x2, y2):
+        return (y2 - y1) / (x2 - x1)
+
+    def formula_2(self, x1, y1, r1, x2, y2, r2):
+        return ((r1**2 - r2**2) - (x1**2 - x2**2) - (y1**2 - y2**2)) / (2 * (x2 - x1))
+
+    def formula_0(self, y1, r1, y2, r2):
+        return ((r1**2 - r2**2) - (y1**2 - y2**2)) / (2 * (y2 - y1))
+
+    def formula_3(self, probe_1, probe_2, probe_3):
+        r1 = self.specific_memory[hash(probe_1.id)]
+        r2 = self.specific_memory[hash(probe_2.id)]
+        r3 = self.specific_memory[hash(probe_3.id)]
+
+        world.locations_lock.acquire()
+        v1 = world.locations[hash(probe_1.id)]
+        v2 = world.locations[hash(probe_2.id)]
+        v3 = world.locations[hash(probe_3.id)]
+        world.locations_lock.release()
+
+        x1 = v1[0]
+        x2 = v2[0]
+        x3 = v3[0]
+
+        y1 = v1[1]
+        y2 = v2[1]
+        y3 = v3[1]
+
+        if (x3 - x1 == 0 or x3 - x2 == 0):
+            return (-1, -1)
+        else:
+            c1 = self.formula_2(x1, y1, r1, x3, y3, r3)
+            c2 = self.formula_2(x2, y2, r2, x3, y3, r3)
+
+            a1 = self.formula_1(x1, y1, x3, y3)
+            a2 = self.formula_1(x2, y2, x3, y3)
+
+            a = a1 - a2
+
+            if (a == 0):
+                return (c1, 0)
+            else:
+                y = (c1 - c2) / a
+                return (c1 - a1 * y, y)
+
     def strategy(self):
-        if(len(world.locations) == 2):
-            self.create_high_probe((5,0,0))
-        if(len(world.locations) == 3):
-            self.create_low_probe((1,2,1))
-            self.create_high_probe((4,2,1))
-        if(len(world.locations) == 5):
-            self.create_low_probe((1,2,3))
-        if(len(world.locations) == 6):
-            self.create_low_probe((1,5,3))
-            self.create_low_probe((-1,2,3))
+        if(len(world.locations) <= 2):
+            self.create_perfect_probe((5,0))
+            self.create_perfect_probe((6,0))
+            self.create_perfect_probe((7,0))
+        else:
+            self.value = self.formula_3(self.probes[0], self.probes[1], self.probes[2])
+            logging_handler.update(self, [(6, str(self.value))])
         threading.Timer(1, self.strategy).start()
 
     def __init__(self, location, balance):
@@ -362,16 +424,25 @@ class defensive_submarine(submarine):
 
 class offensive_submarine(submarine):
     def move_to_submarine(self):
+        world.locations_lock.acquire()
         current_location = world.locations[hash(self.id)]
-        next_location = current_location
+        target_location = world.locations[hash("blu")]
+        vector = (target_location[0] - current_location[0], target_location[1] - current_location[1])
+        if(vector == (0, 0)):
+            return
+        norm = math.sqrt(vector[0]**2 + vector[1]**2)
+        normalized_vector = (vector[0] / norm, vector[1] / norm)
+        next_location = (current_location[0] + normalized_vector[0], current_location[1] + normalized_vector[1])
         world.locations[hash(self.id)] = next_location
-        #logging_handler.update([(1, self.state.type_id), (2, self.state.id)])
-        threading.Timer(1, self.move_to_submarine).start()
+        world.locations_lock.release()
+        logging_handler.update(self, [(4, next_location)])
+        threading.Timer(5, self.move_to_submarine).start()
 
     def hack_random_probe(self):
-        time.sleep(9)
-        world.darknet.append(random.randint(0, 5))
-        threading.Timer(1, self.hack_random_probe).start()
+        #time.sleep(9)
+        #world.darknet.append(random.randint(0, 5))
+        #threading.Timer(1, self.hack_random_probe).start()
+        pass
 
     def __init__(self, location, balance):
         super().__init__("red", location, self.move_to_submarine, self.hack_random_probe, 100)
@@ -379,6 +450,6 @@ class offensive_submarine(submarine):
     def __hash__(self):
         return super().__hash__()
 
-blu_submarine = defensive_submarine((0,0,0), 100)
-red_submarine = offensive_submarine((10,0,0), 100)
+blu_submarine = defensive_submarine((0,0), 100)
+red_submarine = offensive_submarine((10,0), 100)
 

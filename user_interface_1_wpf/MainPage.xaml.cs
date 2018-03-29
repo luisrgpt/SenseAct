@@ -95,7 +95,8 @@ namespace user_interface_1_wpf
             => parameters[01] + ": " + parameters[02]
             + "\nLocal: " + parameters[04].Replace("\"", "")
             + "\nBalan: " + parameters[05].Replace("\"", "")
-            + (parameters.Count() > 06 ? "\nProbes:\n - " + String.Join("\n - ", parameters.Skip(06)) : "");
+            + "\nValue: " + parameters[06].Replace("\"", "")
+            + (parameters.Count() > 07 ? "\nProbes:\n - " + String.Join("\n - ", parameters.Skip(07)) : "");
         private String probe_text (String[] parameters)
             => parameters[01] + ": " + parameters[02]
             + "\nLocal: " + parameters[04].Replace("\"", "")
