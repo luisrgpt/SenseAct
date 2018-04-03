@@ -56,12 +56,7 @@ class simulation_handler(threading.Thread):
         if len(self.submarines) < 2:
             return True
 
-        x_blu = self.submarines[0].location[0]
-        x_red = self.submarines[1].location[0]
-        y_blu = self.submarines[0].location[1]
-        y_red = self.submarines[1].location[1]
-
-        reset_condition = x_blu != x_red or y_blu != y_red
+        reset_condition = functools.reduce(lambda acc, value: acc or value[0] != value[1], zip(self.submarines[0].location, self.submarines[1].location), False)
 
         return reset_condition
 
@@ -286,7 +281,7 @@ class probe(movable, awareable):
             # Parse message
             red_location = ast.literal_eval(message)
             # Calculate measurements
-            distance = math.sqrt(functools.reduce(lambda acc, value: acc + (self.location[value] - red_location[value])**2, range(0, len(self.location) -1), 0))
+            distance = math.sqrt(functools.reduce(lambda acc, value: acc + (value[0] - value[1])**2, zip(self.location, red_location), 0))
 
             if distance <= self.precision:
                 self.value = distance
@@ -449,15 +444,15 @@ class defensive_submarine(submarine):
 
     def awareness(self, message):
         if len(simulation.probes) >= 3:
-            self.value = self.formula_3(simulation.probes[0], simulation.probes[1], simulation.probes[2])
+            #self.value = self.formula_3(simulation.probes[0], simulation.probes[1], simulation.probes[2])
             simulation.update(self, [(6, str(self.value))])
 
     def strategy(self):
         if len(simulation.probes) == 0:
-            self.create_perfect_probe((5,0))
-            self.create_perfect_probe((6,0))
-            self.create_perfect_probe((7,0))
-            self.create_low_probe((20, 0))
+            self.create_perfect_probe((5,))
+            self.create_perfect_probe((6,))
+            self.create_perfect_probe((7,))
+            self.create_low_probe((20,))
 
     def __init__(self, location, balance):
         super().__init__("blu", location, self.no_movement, self.awareness, self.strategy, balance)
@@ -467,12 +462,12 @@ class defensive_submarine(submarine):
 
 class offensive_submarine(submarine):
     def move_to_submarine(self):
-        velocity = (- self.location[0], - self.location[1])
-        if velocity == (0, 0):
+        velocity = tuple(map(lambda value: -value, self.location))
+        norm = math.sqrt(functools.reduce(lambda acc, value: acc + value**2, velocity, 0))
+        if norm == 0:
             return
-        norm = math.sqrt(velocity[0]**2 + velocity[1]**2)
-        normalized_vector = (velocity[0] / norm, velocity[1] / norm)
-        self.location = (self.location[0] + normalized_vector[0], self.location[1] + normalized_vector[1])
+        normalized_vector = tuple(map(lambda value: value / norm, velocity))
+        self.location = tuple(map(lambda value: value[0] + value[1], zip(self.location, normalized_vector)))
 
         for _, handler in simulation.awareness_handlers.items():
             if handler.state.type_id == "probe" and len(simulation.probes) >= handler.state.id:
@@ -496,8 +491,8 @@ class offensive_submarine(submarine):
 
 simulation.start()
 while(True):
-    simulation.submarines.append(defensive_submarine((0,0), 100))
-    simulation.submarines.append(offensive_submarine((10,0), 100))
+    simulation.submarines.append(defensive_submarine((0,), 100))
+    simulation.submarines.append(offensive_submarine((10,), 100))
 
     while(simulation.reset_condition()):
         time.sleep(1 / simulation_handler.frame_per_second)
