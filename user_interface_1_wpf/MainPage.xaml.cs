@@ -86,8 +86,7 @@ namespace user_interface_1_wpf
         }
 
         private void DeletePage(string file_name) {
-            Border border = (Border)this.FindName(file_name);
-            if (border != null)
+            foreach (Border border in this.Root.Children)
                 this.Root.Children.Remove(border);
         }
 
@@ -114,6 +113,7 @@ namespace user_interface_1_wpf
         private Thickness       red_thickness = new Thickness(00, 40, 40, 40);
         private Thickness       blu_thickness = new Thickness(40, 40, 00, 40);
         private Thickness       txt_thickness = new Thickness(10, 10, 10, 10);
+        private SolidColorBrush grey_brush     = new SolidColorBrush(new Color() { A = 0xFF, R = 0x7A, G = 0x75, B = 0x74 });
         private SolidColorBrush red_brush     = new SolidColorBrush(new Color() { A = 0xFF, R = 0xE7, G = 0x48, B = 0x56 });
         private SolidColorBrush blu_brush     = new SolidColorBrush(new Color() { A = 0xFF, R = 0x00, G = 0x78, B = 0xD7 });
         private SolidColorBrush txt_brush     = new SolidColorBrush(Colors.White);
@@ -131,7 +131,8 @@ namespace user_interface_1_wpf
                         = parameters[02] == "red" ? HorizontalAlignment.Right
                         : HorizontalAlignment.Left
                     , Background
-                        = parameters[03] == "red" ? red_brush
+                        = parameters[01] == "probe" && parameters[07] == "-1" ? grey_brush
+                        : parameters[03] == "red" ? red_brush
                         : blu_brush
                     , Margin
                         = parameters[01] == "probe" ? probe_thickness(parameters)

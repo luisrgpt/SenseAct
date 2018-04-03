@@ -19,100 +19,103 @@ import threading
 # - list of locations
 #
 
-csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
-csv_suffix = "_current.csv"
-log_suffix = "_log.csv"
+class simulation_handler(threading.Thread):
+    csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
+    csv_suffix = "_current.csv"
+    log_suffix = "_log.csv"
+    frame_per_second = 1
 
-class world:
-    client_sockets = {}
-    awareness_handlers = {}
+    def restart(self):
+        self.lock.acquire()
+        self.stack = []
+        self.log_content = []
 
-    def reset():
-        world.submarines = []
+        self.dictionary = {}
+        self.csv_content = []
 
-        files = [ file for file in os.listdir(csv_prefix) if file.endswith(csv_suffix) ]
+        self.log_file_name = simulation_handler.csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + simulation_handler.log_suffix
+
+        files = [ file for file in os.listdir(simulation_handler.csv_prefix) if file.endswith(simulation_handler.csv_suffix) ]
         for file in files:
-            os.remove(os.path.join(csv_prefix, file))
+            os.remove(os.path.join(simulation_handler.csv_prefix, file))
 
-    def reset_condition():
-        if len(world.submarines) < 2:
+        time.sleep(1 / simulation_handler.frame_per_second)
+
+        self.submarines = []
+        self.probes = []
+        self.lock.release()
+
+    def __init__(self):
+        super().__init__()
+        self.lock = threading.Lock()
+        self.restart()
+
+        self.awareness_handlers = {}
+
+    def reset_condition(self):
+        if len(self.submarines) < 2:
             return True
 
-        x_blu = world.submarines[0].location[0]
-        x_red = world.submarines[1].location[0]
-        y_blu = world.submarines[0].location[1]
-        y_red = world.submarines[1].location[1]
+        x_blu = self.submarines[0].location[0]
+        x_red = self.submarines[1].location[0]
+        y_blu = self.submarines[0].location[1]
+        y_red = self.submarines[1].location[1]
 
         reset_condition = x_blu != x_red or y_blu != y_red
 
         return reset_condition
 
-###############################################################################
-# Logging
-#
+    def put(self, csv_content):
+        csv_content.insert(0, time.strftime("%Y_%m_%d_%H_%M_%S"))
+        index = csv_content[1] + "_" + csv_content[2]
 
-#class logging_scheduler(threading.Thread):
-#    loop = asyncio.get_event_loop()
+        self.lock.acquire()
+        self.stack.append(csv_content.copy())
+        self.dictionary[index] = csv_content.copy()
+        self.lock.release()
 
-#    def run(self):
-#        self.loop.run_forever()
-
-class logging_handler(threading.Thread):
-    stack = []
-    log_content = []
-
-    dictionary = {}
-    csv_content = []
-
-    lock = threading.Lock()
-
-    def put(csv_content):
-        logging_handler.lock.acquire()
-        logging_handler.stack.append(csv_content.copy())
-        logging_handler.dictionary[csv_content[1] + "_" + csv_content[2]] = csv_content.copy()
-        logging_handler.lock.release()
-
-    def update(submarine_or_probe, csv_changes = []):
+    def update(self, submarine_or_probe, csv_changes = []):
         csv_changes.append((0, time.strftime("%Y_%m_%d_%H_%M_%S")))
+        index = submarine_or_probe.type_id + "_" + str(submarine_or_probe.id)
 
-        logging_handler.lock.acquire()
-        csv_content = logging_handler.dictionary[submarine_or_probe.type_id + "_" + str(submarine_or_probe.id)]
+        self.lock.acquire()
+        csv_content = self.dictionary[index]
         
         for csv_change in csv_changes:
             if len(csv_change) == 1:
                 csv_content.append(csv_change[0])
             elif len(csv_change) == 2:
                 csv_content[csv_change[0]] = csv_change[1]
-        logging_handler.lock.release()
 
-        logging_handler.put(csv_content)
+        self.stack.append(csv_content.copy())
+        self.dictionary[index] = csv_content.copy()
+        self.lock.release()
 
     def take_all(self):
-        logging_handler.lock.acquire()
-        logging_handler.log_content = logging_handler.stack.copy()
-        logging_handler.stack = []
+        self.lock.acquire()
+        self.log_content = self.stack.copy()
+        self.stack = []
 
-        logging_handler.csv_content = logging_handler.dictionary.copy()
-        logging_handler.lock.release()
+        self.csv_content = self.dictionary.copy()
+        self.lock.release()
 
     def run(self):
-        log_file_name = csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + log_suffix
-
-        while(world.reset_condition()):
-            # logging_scheduler.loop.call_soon_threadsafe(self.take_all)
+        while(True):
             self.take_all()
 
-            with open(log_file_name, "a+", newline="") as log_file:
+            with open(self.log_file_name, "a+", newline="") as log_file:
                 log_writer = csv.writer(log_file)
-                for log_row in logging_handler.log_content:
+                for log_row in self.log_content:
                     log_writer.writerow(log_row)
 
-            for csv_id, csv_row in logging_handler.csv_content.items():
-                with open(csv_prefix + csv_id + csv_suffix, "w+", newline="") as csv_file:
+            for csv_id, csv_row in self.csv_content.items():
+                with open(simulation_handler.csv_prefix + csv_id + simulation_handler.csv_suffix, "w+", newline="") as csv_file:
                     csv_writer = csv.writer(csv_file)
                     csv_writer.writerow(csv_row)
 
-            time.sleep(1)
+            time.sleep(1 / simulation_handler.frame_per_second)
+
+simulation = simulation_handler()
 
 ###############################################################################
 # Movable
@@ -132,9 +135,9 @@ class movement_handler(threading.Thread):
         self.state = state
 
     def run(self):
-        while(world.reset_condition()):
+        while(simulation.reset_condition()):
             self.state.movement()
-            time.sleep(5)
+            time.sleep(1 / simulation_handler.frame_per_second)
 
 class movable:
     def __init__(self, type_id, id, location, movement):
@@ -170,7 +173,6 @@ class socket_handler(threading.Thread):
         while(True):
             # Receive message
             message = self.socket.recv(10)
-            print(message)
             # Process message
             self.state.awareness(message.decode("ascii"))
 
@@ -182,6 +184,7 @@ class awareness_handler(threading.Thread):
 
     def restart(self, new_state):
         new_state.socket = self.state.socket
+        new_state.client_socket = self.state.client_socket
         self.state = new_state
         for socket_handler in self.socket_handlers:
             socket_handler.restart(self.state)
@@ -204,10 +207,10 @@ class awareable:
 
         # Get port
         self.port = (20000 if self.type_id == "probe" else 10000) + (50 if self.id == "red" else 40 if self.id == "blu" else int(self.id))
-        if self.port in world.awareness_handlers:
-            world.awareness_handlers[self.port].restart(self)
+        if self.port in simulation.awareness_handlers:
+            simulation.awareness_handlers[self.port].restart(self)
         else:
-            # Create a TCP socket object
+            # Create a TCP server socket object
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # Get local machine name
             self.hostname = socket.gethostname()
@@ -216,8 +219,13 @@ class awareable:
             # Queue up to 10 requests
             self.socket.listen(10)
 
-            world.awareness_handlers[self.port] = awareness_handler(self)
-            world.awareness_handlers[self.port].start()
+            # Create a TCP client socket object
+            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Establish connection
+            self.client_socket.connect((self.hostname, self.port))
+
+            simulation.awareness_handlers[self.port] = awareness_handler(self)
+            simulation.awareness_handlers[self.port].start()
 
 
     def __hash__(self):
@@ -273,48 +281,42 @@ class probe(movable, awareable):
 
     def awareness(self, message):
         if message == "red":
-            self.owner_id = "red"
-            logging_handler.update(self, [(3, self.owner_id)])
+            simulation.update(self, [(3, "red")])
         else:
             # Parse message
             red_location = ast.literal_eval(message)
             # Calculate measurements
-            measurement = math.sqrt(functools.reduce(lambda acc, value: acc + (self.location[value] - red_location[value])**2, [0, 1], 0))
-            measurement_with_error = measurement + random.uniform(-self.precision, self.precision)
-        
-            self.value = measurement_with_error if measurement_with_error > 0 else 0
-            if self.value == 0:
+            distance = math.sqrt(functools.reduce(lambda acc, value: acc + (self.location[value] - red_location[value])**2, range(0, len(self.location) -1), 0))
+
+            if distance <= self.precision:
+                self.value = distance
                 # Send message
                 message = str(self.id).encode("ascii")
-                self.owner_socket.send(message)
+                self.owner.client_socket.send(message)
                 # Update log
-                logging_handler.update(self, [(7, str(self.value))])
+                simulation.update(self, [(7, str(self.value))])
+            elif not self.value == -1:
+                self.value = -1
+                # Update log
+                simulation.update(self, [(7, str(self.value))])
 
 
     def __init__(self, id, location, owner, cost, precision):
         self.cost : int = cost
         self.precision : int = precision
         self.value : int = -1
-        self.owner_id = str(owner.id)
-        self.owner_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.owner_hostname = socket.gethostname()
-        self.owner_port = 10040
-        # Establish connection
-        self.owner_socket.connect((self.owner_hostname, self.owner_port))
-        timestamp = time.strftime("%Y_%m_%d_%H_%M_%S")
+        self.owner = owner
         csv_content = []
-        csv_content.append(timestamp)
         csv_content.append("probe")
         csv_content.append(str(id))
-        csv_content.append(self.owner_id)
+        csv_content.append(self.owner.id)
         csv_content.append(location)
         csv_content.append(str(self.cost))
         csv_content.append(str(self.precision))
         csv_content.append(str(self.value))
 
         # Create log
-        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
-        logging_handler.put(csv_content)
+        simulation.put(csv_content)
 
         movable.__init__(self, "probe", id, location, self.movement)
         awareable.__init__(self, self.awareness)
@@ -362,13 +364,10 @@ class perfect_probe(probe) :
 # - hacks probes and moves towards enemy submarines
 
 class submarine(movable, awareable, decidable):
-    probes = []
-
     def __init__(self, id, location, movement, awareness, strategy, balance):
         self.balance = balance
         self.value = -1
         csv_content = []
-        csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
         csv_content.append("submarine")
         csv_content.append(str(id))
         csv_content.append(str(id))
@@ -377,8 +376,7 @@ class submarine(movable, awareable, decidable):
         csv_content.append(str(self.value))
 
         # Create log
-        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
-        logging_handler.put(csv_content)
+        simulation.put(csv_content)
 
         movable.__init__(self, "submarine", id, location, movement)
         awareable.__init__(self, awareness)
@@ -393,25 +391,18 @@ class defensive_submarine(submarine):
 
     def create_probe(self, probe):
         self.balance -= probe.cost
-        submarine.probes.append(probe)
-
-        if not probe.port in world.client_sockets:
-            probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            # Establish connection
-            probe_socket.connect((probe.hostname, probe.port))
-            world.client_sockets[probe.port] = probe_socket
-
-        logging_handler.update(self, [(5, str(self.balance)), (str(probe.id))])
+        simulation.probes.append(probe)
+        simulation.update(self, [(5, str(self.balance)), (str(probe.id))])
         return self
 
     def create_perfect_probe(self, location):
-        return self.create_probe(perfect_probe(len(submarine.probes), location, self))
+        return self.create_probe(perfect_probe(len(simulation.probes), location, self))
 
     def create_high_probe(self, location):
-        return self.create_probe(high_probe(len(submarine.probes), location, self))
+        return self.create_probe(high_probe(len(simulation.probes), location, self))
 
     def create_low_probe(self, location):
-        return self.create_probe(low_probe(len(submarine.probes), location, self))
+        return self.create_probe(low_probe(len(simulation.probes), location, self))
 
     def formula_1(self, x1, y1, x2, y2):
         return (y2 - y1) / (x2 - x1)
@@ -457,12 +448,12 @@ class defensive_submarine(submarine):
                 return (c1 - a1 * y, y)
 
     def awareness(self, message):
-        if len(submarine.probes) >= 3:
-            self.value = self.formula_3(submarine.probes[0], submarine.probes[1], submarine.probes[2])
-            logging_handler.update(self, [(6, str(self.value))])
+        if len(simulation.probes) >= 3:
+            self.value = self.formula_3(simulation.probes[0], simulation.probes[1], simulation.probes[2])
+            simulation.update(self, [(6, str(self.value))])
 
     def strategy(self):
-        if len(submarine.probes) == 0:
+        if len(simulation.probes) == 0:
             self.create_perfect_probe((5,0))
             self.create_perfect_probe((6,0))
             self.create_perfect_probe((7,0))
@@ -483,10 +474,10 @@ class offensive_submarine(submarine):
         normalized_vector = (velocity[0] / norm, velocity[1] / norm)
         self.location = (self.location[0] + normalized_vector[0], self.location[1] + normalized_vector[1])
 
-        for _, probe_socket in world.client_sockets.items():
-            print("a")
-            probe_socket.send(str(self.location).encode('ascii'))
-        logging_handler.update(self, [(4, self.location)])
+        for _, handler in simulation.awareness_handlers.items():
+            if handler.state.type_id == "probe" and len(simulation.probes) >= handler.state.id:
+                handler.state.client_socket.send(str(self.location).encode('ascii'))
+        simulation.update(self, [(4, self.location)])
 
     def awareness(self, message):
         pass
@@ -503,16 +494,11 @@ class offensive_submarine(submarine):
     def __hash__(self):
         return super().__hash__()
 
-world.reset()
+simulation.start()
 while(True):
+    simulation.submarines.append(defensive_submarine((0,0), 100))
+    simulation.submarines.append(offensive_submarine((10,0), 100))
 
-    world.submarines.append(defensive_submarine((0,0), 100))
-    world.submarines.append(offensive_submarine((10,0), 100))
-
-    logging_handler().start()
-
-    while(world.reset_condition()):
-        time.sleep(6)
-    time.sleep(1)
-    world.reset()
-    time.sleep(0.5)
+    while(simulation.reset_condition()):
+        time.sleep(1 / simulation_handler.frame_per_second)
+    simulation.restart()
