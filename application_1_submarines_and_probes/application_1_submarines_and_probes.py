@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import ast
 import asyncio
 import csv
 import functools
@@ -7,6 +8,7 @@ import math
 import os
 import queue
 import random
+import socket
 import time
 import threading
 
@@ -19,19 +21,31 @@ import threading
 
 csv_prefix = "../user_interface_1_wpf/bin/x86/Debug/AppX/"
 csv_suffix = "_current.csv"
-
-log_file_name = csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + "_log.csv"
-
-files = [ file for file in os.listdir(csv_prefix) if file.endswith(csv_suffix) ]
-for file in files:
-    os.remove(os.path.join(csv_prefix, file))
+log_suffix = "_log.csv"
 
 class world:
-    locations = {}
-    network = []
-    darknet = []
-    lock = threading.Lock()
-    locations_lock = threading.Lock()
+    client_sockets = {}
+    awareness_handlers = {}
+
+    def reset():
+        world.submarines = []
+
+        files = [ file for file in os.listdir(csv_prefix) if file.endswith(csv_suffix) ]
+        for file in files:
+            os.remove(os.path.join(csv_prefix, file))
+
+    def reset_condition():
+        if len(world.submarines) < 2:
+            return True
+
+        x_blu = world.submarines[0].location[0]
+        x_red = world.submarines[1].location[0]
+        y_blu = world.submarines[0].location[1]
+        y_red = world.submarines[1].location[1]
+
+        reset_condition = x_blu != x_red or y_blu != y_red
+
+        return reset_condition
 
 ###############################################################################
 # Logging
@@ -62,7 +76,7 @@ class logging_handler(threading.Thread):
         csv_changes.append((0, time.strftime("%Y_%m_%d_%H_%M_%S")))
 
         logging_handler.lock.acquire()
-        csv_content = logging_handler.dictionary[submarine_or_probe.type_id + "_" + submarine_or_probe.id]
+        csv_content = logging_handler.dictionary[submarine_or_probe.type_id + "_" + str(submarine_or_probe.id)]
         
         for csv_change in csv_changes:
             if len(csv_change) == 1:
@@ -82,23 +96,23 @@ class logging_handler(threading.Thread):
         logging_handler.lock.release()
 
     def run(self):
-        # logging_scheduler.loop.call_soon_threadsafe(self.take_all)
-        self.take_all()
+        log_file_name = csv_prefix + str(time.strftime("%Y_%m_%d_%H_%M_%S")) + log_suffix
 
-        with open(log_file_name, "a+", newline="") as log_file:
-            log_writer = csv.writer(log_file)
-            for log_row in logging_handler.log_content:
-                log_writer.writerow(log_row)
+        while(world.reset_condition()):
+            # logging_scheduler.loop.call_soon_threadsafe(self.take_all)
+            self.take_all()
 
-        for csv_id, csv_row in logging_handler.csv_content.items():
-            with open(csv_prefix + csv_id + csv_suffix, "w+", newline="") as csv_file:
-                csv_writer = csv.writer(csv_file)
-                csv_writer.writerow(csv_row)
+            with open(log_file_name, "a+", newline="") as log_file:
+                log_writer = csv.writer(log_file)
+                for log_row in logging_handler.log_content:
+                    log_writer.writerow(log_row)
 
-        threading.Timer(1, self.run).start()
+            for csv_id, csv_row in logging_handler.csv_content.items():
+                with open(csv_prefix + csv_id + csv_suffix, "w+", newline="") as csv_file:
+                    csv_writer = csv.writer(csv_file)
+                    csv_writer.writerow(csv_row)
 
-# logging_scheduler().start()
-logging_handler().start()
+            time.sleep(1)
 
 ###############################################################################
 # Movable
@@ -118,18 +132,15 @@ class movement_handler(threading.Thread):
         self.state = state
 
     def run(self):
-        self.state.movement()
+        while(world.reset_condition()):
+            self.state.movement()
+            time.sleep(5)
 
 class movable:
-    def no_movement():
-        pass
-
-    def __init__(self, type_id, id, location, movement = no_movement):
+    def __init__(self, type_id, id, location, movement):
         self.type_id = type_id
-        self.id = str(id)
-        world.locations_lock.acquire()
-        world.locations[hash(self.id)] = location
-        world.locations_lock.release()
+        self.id = id
+        self.location = location
         self.movement = movement
         movement_handler(self).start()
 
@@ -146,22 +157,68 @@ class movable:
 # Behaviour:
 # - listens to external messages
 
+class socket_handler(threading.Thread):
+    def __init__(self, state, socket):
+        super().__init__()
+        self.state = state
+        self.socket = socket
+
+    def restart(self, new_state):
+        self.state = new_state
+
+    def run(self):
+        while(True):
+            # Receive message
+            message = self.socket.recv(10)
+            print(message)
+            # Process message
+            self.state.awareness(message.decode("ascii"))
+
 class awareness_handler(threading.Thread):
     def __init__(self, state):
         super().__init__()
         self.state = state
+        self.socket_handlers = []
+
+    def restart(self, new_state):
+        new_state.socket = self.state.socket
+        self.state = new_state
+        for socket_handler in self.socket_handlers:
+            socket_handler.restart(self.state)
 
     def run(self):
-        self.state.awareness()
+        while(True):
+            # Establish connection
+            client_socket, _ = self.state.socket.accept()
+            # Receive message
+            self.socket_handlers.append(socket_handler(self.state, client_socket))
+            self.socket_handlers[-1].start()
 
 class awareable:
-    def no_awareness():
+    def no_awareness(message):
         pass
 
     def __init__(self, awareness = no_awareness):
         self.memory = []
         self.awareness = awareness
-        awareness_handler(self).start()
+
+        # Get port
+        self.port = (20000 if self.type_id == "probe" else 10000) + (50 if self.id == "red" else 40 if self.id == "blu" else int(self.id))
+        if self.port in world.awareness_handlers:
+            world.awareness_handlers[self.port].restart(self)
+        else:
+            # Create a TCP socket object
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Get local machine name
+            self.hostname = socket.gethostname()
+            # TCP bind to hostname on the port.
+            self.socket.bind((self.hostname, self.port))
+            # Queue up to 10 requests
+            self.socket.listen(10)
+
+            world.awareness_handlers[self.port] = awareness_handler(self)
+            world.awareness_handlers[self.port].start()
+
 
     def __hash__(self):
         return hash(self.id)
@@ -210,41 +267,40 @@ class decidable:
 # - measures its distance from other world objects 
 # - sends measurement to submarine
 
-class probe(movable, awareable, decidable):
-    def awareness(self):
-        if(int(self.id) in world.darknet):
+class probe(movable, awareable):
+    def movement(self):
+        pass
+
+    def awareness(self, message):
+        if message == "red":
             self.owner_id = "red"
             logging_handler.update(self, [(3, self.owner_id)])
-        threading.Timer(1, self.awareness).start()
-
-    def strategy(self):
-        # Get locations
-        world.locations_lock.acquire()
-        location = world.locations[hash(self.id)]
-        red_location = world.locations[hash("red")]
-        world.locations_lock.release()
-        # Calculate measurements
-        measurement = math.sqrt(functools.reduce(lambda acc, value: acc + (location[value] - red_location[value])**2, [0, 1], 0))
-        measurement_with_error = measurement + random.uniform(-self.precision, self.precision)
+        else:
+            # Parse message
+            red_location = ast.literal_eval(message)
+            # Calculate measurements
+            measurement = math.sqrt(functools.reduce(lambda acc, value: acc + (self.location[value] - red_location[value])**2, [0, 1], 0))
+            measurement_with_error = measurement + random.uniform(-self.precision, self.precision)
         
-        self.value = measurement_with_error if measurement_with_error > 0 else 0
-        # Send measurement
-        world.lock.acquire()
-        world.network.append((self.id, self.value))
-        world.lock.release()
+            self.value = measurement_with_error if measurement_with_error > 0 else 0
+            if self.value == 0:
+                # Send message
+                message = str(self.id).encode("ascii")
+                self.owner_socket.send(message)
+                # Update log
+                logging_handler.update(self, [(7, str(self.value))])
 
-        # Update log
-        # logging_scheduler.loop.call_soon_threadsafe(logging_handler.update, [(1, self.type_id), (2, self.id), (0, time.strftime("%Y_%m_%d_%H_%M_%S")), (7, str(self.value))])
-        logging_handler.update(self, [(7, str(self.value))])
-
-        # Repeat strategy
-        threading.Timer(1, self.strategy).start()
 
     def __init__(self, id, location, owner, cost, precision):
-        self.owner_id = str(owner.id)
         self.cost : int = cost
         self.precision : int = precision
         self.value : int = -1
+        self.owner_id = str(owner.id)
+        self.owner_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.owner_hostname = socket.gethostname()
+        self.owner_port = 10040
+        # Establish connection
+        self.owner_socket.connect((self.owner_hostname, self.owner_port))
         timestamp = time.strftime("%Y_%m_%d_%H_%M_%S")
         csv_content = []
         csv_content.append(timestamp)
@@ -260,9 +316,9 @@ class probe(movable, awareable, decidable):
         # logging_scheduler.loop.call_soon_threadsafe(logging_handler.put, csv_content)
         logging_handler.put(csv_content)
 
-        movable.__init__(self, "probe", id, location)
+        movable.__init__(self, "probe", id, location, self.movement)
         awareable.__init__(self, self.awareness)
-        decidable.__init__(self, self.strategy)
+        #decidable.__init__(self, self.strategy)
 
     def __hash__(self):
         return movable.__hash__(self)
@@ -306,21 +362,10 @@ class perfect_probe(probe) :
 # - hacks probes and moves towards enemy submarines
 
 class submarine(movable, awareable, decidable):
-    def awareness(self):
-        world.lock.acquire()
-        messages = world.network.copy()
-        world.network = []
-        world.lock.release()
+    probes = []
 
-        self.memory += messages
-        for message in messages:
-            self.specific_memory[hash(message[0])] = message[1]
-        threading.Timer(1, self.awareness).start()
-
-    def __init__(self, id, location, movement, strategy, balance):
+    def __init__(self, id, location, movement, awareness, strategy, balance):
         self.balance = balance
-        self.probes = []
-        self.specific_memory = {}
         self.value = -1
         csv_content = []
         csv_content.append(time.strftime("%Y_%m_%d_%H_%M_%S"))
@@ -336,7 +381,7 @@ class submarine(movable, awareable, decidable):
         logging_handler.put(csv_content)
 
         movable.__init__(self, "submarine", id, location, movement)
-        awareable.__init__(self, self.awareness)
+        awareable.__init__(self, awareness)
         decidable.__init__(self, strategy)
 
     def __hash__(self):
@@ -348,18 +393,25 @@ class defensive_submarine(submarine):
 
     def create_probe(self, probe):
         self.balance -= probe.cost
-        self.probes.append(probe)
-        logging_handler.update(self, [(4, str(self.balance)), (probe.id)])
+        submarine.probes.append(probe)
+
+        if not probe.port in world.client_sockets:
+            probe_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # Establish connection
+            probe_socket.connect((probe.hostname, probe.port))
+            world.client_sockets[probe.port] = probe_socket
+
+        logging_handler.update(self, [(5, str(self.balance)), (str(probe.id))])
         return self
 
     def create_perfect_probe(self, location):
-        return self.create_probe(perfect_probe(len(self.probes), location, self))
+        return self.create_probe(perfect_probe(len(submarine.probes), location, self))
 
     def create_high_probe(self, location):
-        return self.create_probe(high_probe(len(self.probes), location, self))
+        return self.create_probe(high_probe(len(submarine.probes), location, self))
 
     def create_low_probe(self, location):
-        return self.create_probe(low_probe(len(self.probes), location, self))
+        return self.create_probe(low_probe(len(submarine.probes), location, self))
 
     def formula_1(self, x1, y1, x2, y2):
         return (y2 - y1) / (x2 - x1)
@@ -371,15 +423,13 @@ class defensive_submarine(submarine):
         return ((r1**2 - r2**2) - (y1**2 - y2**2)) / (2 * (y2 - y1))
 
     def formula_3(self, probe_1, probe_2, probe_3):
-        r1 = self.specific_memory[hash(probe_1.id)]
-        r2 = self.specific_memory[hash(probe_2.id)]
-        r3 = self.specific_memory[hash(probe_3.id)]
+        r1 = 0
+        r2 = 0
+        r3 = 0
 
-        world.locations_lock.acquire()
-        v1 = world.locations[hash(probe_1.id)]
-        v2 = world.locations[hash(probe_2.id)]
-        v3 = world.locations[hash(probe_3.id)]
-        world.locations_lock.release()
+        v1 = probe_1.location
+        v2 = probe_2.location
+        v3 = probe_3.location
 
         x1 = v1[0]
         x2 = v2[0]
@@ -406,37 +456,40 @@ class defensive_submarine(submarine):
                 y = (c1 - c2) / a
                 return (c1 - a1 * y, y)
 
+    def awareness(self, message):
+        if len(submarine.probes) >= 3:
+            self.value = self.formula_3(submarine.probes[0], submarine.probes[1], submarine.probes[2])
+            logging_handler.update(self, [(6, str(self.value))])
+
     def strategy(self):
-        if(len(world.locations) <= 2):
+        if len(submarine.probes) == 0:
             self.create_perfect_probe((5,0))
             self.create_perfect_probe((6,0))
             self.create_perfect_probe((7,0))
-        else:
-            self.value = self.formula_3(self.probes[0], self.probes[1], self.probes[2])
-            logging_handler.update(self, [(6, str(self.value))])
-        threading.Timer(1, self.strategy).start()
+            self.create_low_probe((20, 0))
 
     def __init__(self, location, balance):
-        super().__init__("blu", location, self.no_movement, self.strategy, balance)
+        super().__init__("blu", location, self.no_movement, self.awareness, self.strategy, balance)
 
     def __hash__(self):
         return super().__hash__()
 
 class offensive_submarine(submarine):
     def move_to_submarine(self):
-        world.locations_lock.acquire()
-        current_location = world.locations[hash(self.id)]
-        target_location = world.locations[hash("blu")]
-        vector = (target_location[0] - current_location[0], target_location[1] - current_location[1])
-        if(vector == (0, 0)):
+        velocity = (- self.location[0], - self.location[1])
+        if velocity == (0, 0):
             return
-        norm = math.sqrt(vector[0]**2 + vector[1]**2)
-        normalized_vector = (vector[0] / norm, vector[1] / norm)
-        next_location = (current_location[0] + normalized_vector[0], current_location[1] + normalized_vector[1])
-        world.locations[hash(self.id)] = next_location
-        world.locations_lock.release()
-        logging_handler.update(self, [(4, next_location)])
-        threading.Timer(5, self.move_to_submarine).start()
+        norm = math.sqrt(velocity[0]**2 + velocity[1]**2)
+        normalized_vector = (velocity[0] / norm, velocity[1] / norm)
+        self.location = (self.location[0] + normalized_vector[0], self.location[1] + normalized_vector[1])
+
+        for _, probe_socket in world.client_sockets.items():
+            print("a")
+            probe_socket.send(str(self.location).encode('ascii'))
+        logging_handler.update(self, [(4, self.location)])
+
+    def awareness(self, message):
+        pass
 
     def hack_random_probe(self):
         #time.sleep(9)
@@ -445,11 +498,21 @@ class offensive_submarine(submarine):
         pass
 
     def __init__(self, location, balance):
-        super().__init__("red", location, self.move_to_submarine, self.hack_random_probe, 100)
+        super().__init__("red", location, self.move_to_submarine, self.awareness, self.hack_random_probe, 100)
 
     def __hash__(self):
         return super().__hash__()
 
-blu_submarine = defensive_submarine((0,0), 100)
-red_submarine = offensive_submarine((10,0), 100)
+world.reset()
+while(True):
 
+    world.submarines.append(defensive_submarine((0,0), 100))
+    world.submarines.append(offensive_submarine((10,0), 100))
+
+    logging_handler().start()
+
+    while(world.reset_condition()):
+        time.sleep(6)
+    time.sleep(1)
+    world.reset()
+    time.sleep(0.5)
