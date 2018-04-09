@@ -90,33 +90,40 @@ namespace user_interface_1_wpf
                 this.Root.Children.Remove(border);
         }
 
+        private String ship_text(String[] parameters)
+            => parameters[01]
+            + "\nLocal: " + parameters[02].Replace("\"", "")
+            + "\nBalan: " + parameters[03].Replace("\"", "")
+            + "\nValue: " + parameters[04].Replace("\"", "")
+            + (parameters.Count() > 05 ? "\nProbes:\n - " + String.Join("\n - ", parameters.Skip(05)) : "")
+            ;
         private String submarine_text(String[] parameters)
-            => parameters[01] + ": " + parameters[02]
-            + "\nLocal: " + parameters[04].Replace("\"", "")
-            + "\nBalan: " + parameters[05].Replace("\"", "")
-            + "\nValue: " + parameters[06].Replace("\"", "")
-            + (parameters.Count() > 07 ? "\nProbes:\n - " + String.Join("\n - ", parameters.Skip(07)) : "");
+            => parameters[01]
+            + "\nLocal: " + parameters[02].Replace("\"", "")
+            ;
         private String probe_text (String[] parameters)
             => parameters[01] + ": " + parameters[02]
-            + "\nLocal: " + parameters[04].Replace("\"", "")
-            + "\nCost:  " + parameters[05]
-            + "\nUncer: " + parameters[06]
-            + "\nValue: " + Math.Round(float.Parse(parameters[07]), 6);
+            + "\nLocal: " + parameters[03].Replace("\"", "")
+            ;
         private Thickness probe_thickness (String[] parameters)
             => new Thickness
-                ( 250 + 210 * (Int32.Parse(parameters[02]) / 4)
-                , 040 + 124 * (Int32.Parse(parameters[02]) % 4)
+                ( 250 + 168 * (Int32.Parse(parameters[02]) % 4)
+                , 040 + 62 * (Int32.Parse(parameters[02]) / 4)
                 , 00
                 , 00
                 );
 
-        private Thickness       red_thickness = new Thickness(00, 40, 40, 40);
-        private Thickness       blu_thickness = new Thickness(40, 40, 00, 40);
-        private Thickness       txt_thickness = new Thickness(10, 10, 10, 10);
-        private SolidColorBrush grey_brush     = new SolidColorBrush(new Color() { A = 0xFF, R = 0x7A, G = 0x75, B = 0x74 });
-        private SolidColorBrush red_brush     = new SolidColorBrush(new Color() { A = 0xFF, R = 0xE7, G = 0x48, B = 0x56 });
-        private SolidColorBrush blu_brush     = new SolidColorBrush(new Color() { A = 0xFF, R = 0x00, G = 0x78, B = 0xD7 });
-        private SolidColorBrush txt_brush     = new SolidColorBrush(Colors.White);
+        private Thickness submarine_thickness = new Thickness(00, 40, 40, 40);
+        private Thickness ship_thickness      = new Thickness(40, 40, 00, 40);
+        private Thickness text_thickness      = new Thickness(10, 10, 10, 10);
+
+        private SolidColorBrush ship_brush                = new SolidColorBrush(new Color() { A = 0xFF, R = 0x00, G = 0x78, B = 0xD7 }); //Blue
+        private SolidColorBrush submarine_brush           = new SolidColorBrush(new Color() { A = 0xFF, R = 0xE7, G = 0x48, B = 0x56 }); //Red
+        private SolidColorBrush probe_brush               = new SolidColorBrush(new Color() { A = 0xFF, R = 0x62, G = 0x75, B = 0x88 }); //Blue Grey
+        private SolidColorBrush active_probe_brush        = new SolidColorBrush(new Color() { A = 0xFF, R = 0x00, G = 0x78, B = 0xD7 }); //Blue
+        private SolidColorBrush hacked_probe_brush        = new SolidColorBrush(new Color() { A = 0xFF, R = 0x90, G = 0x6B, B = 0x6E }); //Red Grey
+        private SolidColorBrush active_hacked_probe_brush = new SolidColorBrush(new Color() { A = 0xFF, R = 0xE7, G = 0x48, B = 0x56 }); //Red
+        private SolidColorBrush text_brush                = new SolidColorBrush(Colors.White);
 
         private void UpdatePage(string[] parameters)
         {
@@ -128,25 +135,31 @@ namespace user_interface_1_wpf
                         = parameters[01] == "probe" ? VerticalAlignment.Top
                         : VerticalAlignment.Stretch
                     , HorizontalAlignment
-                        = parameters[02] == "red" ? HorizontalAlignment.Right
+                        = parameters[01] == "submarine" ? HorizontalAlignment.Right
                         : HorizontalAlignment.Left
                     , Background
-                        = parameters[01] == "probe" && parameters[07] == "-1" ? grey_brush
-                        : parameters[03] == "red" ? red_brush
-                        : blu_brush
+                        = parameters[01] == "ship"                         ? ship_brush
+                        : parameters[01] == "submarine"                    ? submarine_brush
+                        : parameters.Length == 5 && parameters[04] == "no" ? probe_brush
+                        : parameters.Length == 5                           ? active_probe_brush
+                        : parameters[04] == "no"                           ? hacked_probe_brush
+                        : active_hacked_probe_brush
                     , Margin
-                        = parameters[01] == "probe" ? probe_thickness(parameters)
-                        : parameters[03] == "red" ? red_thickness
-                        : blu_thickness
+                        = parameters[01] == "ship"      ? ship_thickness
+                        : parameters[01] == "submarine" ? submarine_thickness
+                        : probe_thickness(parameters)
                     , Width
-                        = 200
+                        = parameters[01] == "ship"      ? 200
+                        : parameters[01] == "submarine" ? 200
+                        : 164
                     , Child = new TextBlock()
-                        { Margin                  = txt_thickness
+                        { Margin = text_thickness
                         , Text
-                            = parameters[01] == "probe" ? probe_text(parameters)
-                            : submarine_text(parameters)
+                            = parameters[01] == "ship"      ? ship_text(parameters)
+                            : parameters[01] == "submarine" ? submarine_text(parameters)
+                            : probe_text(parameters)
                         , TextWrapping            = TextWrapping.Wrap
-                        , FocusVisualPrimaryBrush = txt_brush
+                        , FocusVisualPrimaryBrush = text_brush
                         , FontFamily              = new FontFamily("Consolas")
                         , FontSize                = 16
                         }
@@ -156,8 +169,9 @@ namespace user_interface_1_wpf
             else
             {
                 ((TextBlock)border.Child).Text
-                    = parameters[01] == "probe" ? probe_text(parameters)
-                    : submarine_text(parameters);
+                    = parameters[01] == "ship"      ? ship_text(parameters)
+                    : parameters[01] == "submarine" ? submarine_text(parameters)
+                    : probe_text(parameters);
             }
         }
     }

@@ -4,6 +4,7 @@ import ast
 import asyncio
 import csv
 import functools
+import intervals
 import math
 import os
 import queue
@@ -56,13 +57,18 @@ class simulation_handler(threading.Thread):
         if len(self.submarines) < 2:
             return True
 
-        reset_condition = functools.reduce(lambda acc, value: acc or value[0] != value[1], zip(self.submarines[0].location, self.submarines[1].location), False)
+        reset_condition = any(value[0] != value[1] for value in zip(self.submarines[0].location, self.submarines[1].location))
 
         return reset_condition
 
     def put(self, csv_content):
+        csv_content = list(map(lambda value:  str(value), csv_content))
+
         csv_content.insert(0, time.strftime("%Y_%m_%d_%H_%M_%S"))
-        index = csv_content[1] + "_" + csv_content[2]
+        if csv_content[1] == "probe":
+            index = csv_content[1] + "_" + csv_content[2]
+        else:
+            index = csv_content[1]
 
         self.lock.acquire()
         self.stack.append(csv_content.copy())
@@ -70,8 +76,14 @@ class simulation_handler(threading.Thread):
         self.lock.release()
 
     def update(self, submarine_or_probe, csv_changes = []):
+        csv_content = list(map(lambda value:  (value[0], str(value[1])) if len(value) == 2 else str(value[0]), csv_changes))
+
         csv_changes.append((0, time.strftime("%Y_%m_%d_%H_%M_%S")))
-        index = submarine_or_probe.type_id + "_" + str(submarine_or_probe.id)
+
+        if submarine_or_probe.type_id == "probe":
+            index = submarine_or_probe.type_id + "_" + str(submarine_or_probe.id)
+        else:
+            index = submarine_or_probe.type_id
 
         self.lock.acquire()
         csv_content = self.dictionary[index]
@@ -201,7 +213,13 @@ class awareable:
         self.awareness = awareness
 
         # Get port
-        self.port = (20000 if self.type_id == "probe" else 10000) + (50 if self.id == "red" else 40 if self.id == "blu" else int(self.id))
+        if self.type_id == "ship":
+            self.port = 10040
+        elif self.type_id == "submarine":
+            self.port = 10050
+        elif self.type_id == "probe":
+            self.port = 20000 + int(self.id)
+
         if self.port in simulation.awareness_handlers:
             simulation.awareness_handlers[self.port].restart(self)
         else:
@@ -275,40 +293,36 @@ class probe(movable, awareable):
         pass
 
     def awareness(self, message):
-        if message == "red":
-            simulation.update(self, [(3, "red")])
+        if message == "submarine":
+            simulation.update(self, [["HACKED!!!"]])
+        elif message == "probe":
+            # Send message
+            message = self.value.encode("ascii")
+            self.owner.client_socket.send(message)
         else:
             # Parse message
-            red_location = ast.literal_eval(message)
+            submarine_location = ast.literal_eval(message)
             # Calculate measurements
-            distance = math.sqrt(functools.reduce(lambda acc, value: acc + (value[0] - value[1])**2, zip(self.location, red_location), 0))
-
+            distance = math.sqrt(functools.reduce(lambda acc, value: acc + (value[0] - value[1])**2, zip(self.location, submarine_location), 0))
             if distance <= self.precision:
-                self.value = distance
-                # Send message
-                message = str(self.id).encode("ascii")
-                self.owner.client_socket.send(message)
+                self.value = "yes"
                 # Update log
-                simulation.update(self, [(7, str(self.value))])
-            elif not self.value == -1:
-                self.value = -1
+                simulation.update(self, [[4, self.value]])
+            elif self.value == "yes":
+                self.value = "no"
                 # Update log
-                simulation.update(self, [(7, str(self.value))])
-
+                simulation.update(self, [[4, self.value]])
 
     def __init__(self, id, location, owner, cost, precision):
         self.cost : int = cost
         self.precision : int = precision
-        self.value : int = -1
+        self.value : int = "no"
         self.owner = owner
         csv_content = []
         csv_content.append("probe")
-        csv_content.append(str(id))
-        csv_content.append(self.owner.id)
-        csv_content.append(location)
-        csv_content.append(str(self.cost))
-        csv_content.append(str(self.precision))
-        csv_content.append(str(self.value))
+        csv_content.append(id)
+        csv_content.append(list(map(lambda value: intervals.interval(value - precision, value + precision, intervals.limit.open, intervals.limit.open), location)))
+        csv_content.append(self.value)
 
         # Create log
         simulation.put(csv_content)
@@ -329,7 +343,7 @@ class low_probe(probe) :
 
 class high_probe(probe) :
     def __init__(self, id, location, owner):
-        super().__init__(id, location, owner, 10, 2)
+        super().__init__(id, location, owner, 10, 3)
 
     def __hash__(self):
         return super().__hash__()
@@ -340,6 +354,22 @@ class perfect_probe(probe) :
 
     def __hash__(self):
         return super().__hash__()
+
+###############################################################################
+# Alert
+
+class alert:
+    def __init__(self, range, cost):
+        self.interval = range
+        self.cost = cost
+
+class red_alert(alert):
+    def __init__(self):
+        super().__init__(intervals.interval(40, 45, intervals.limit.closed, intervals.limit.closed), 10)
+
+class yellow_alert(alert):
+    def __init__(self):
+        super().__init__(intervals.interval(45, 70, intervals.limit.open, intervals.limit.closed), 5)
 
 ###############################################################################
 # Submarine
@@ -358,36 +388,14 @@ class perfect_probe(probe) :
 # OR
 # - hacks probes and moves towards enemy submarines
 
-class submarine(movable, awareable, decidable):
-    def __init__(self, id, location, movement, awareness, strategy, balance):
-        self.balance = balance
-        self.value = -1
-        csv_content = []
-        csv_content.append("submarine")
-        csv_content.append(str(id))
-        csv_content.append(str(id))
-        csv_content.append(location)
-        csv_content.append(str(self.balance))
-        csv_content.append(str(self.value))
-
-        # Create log
-        simulation.put(csv_content)
-
-        movable.__init__(self, "submarine", id, location, movement)
-        awareable.__init__(self, awareness)
-        decidable.__init__(self, strategy)
-
-    def __hash__(self):
-        return movable.__hash__(self)
-
-class defensive_submarine(submarine):
+class ship(movable, awareable, decidable):
     def no_movement(self):
         pass
 
     def create_probe(self, probe):
         self.balance -= probe.cost
         simulation.probes.append(probe)
-        simulation.update(self, [(5, str(self.balance)), (str(probe.id))])
+        simulation.update(self, [[3, self.balance], [probe.id]])
         return self
 
     def create_perfect_probe(self, location):
@@ -399,100 +407,98 @@ class defensive_submarine(submarine):
     def create_low_probe(self, location):
         return self.create_probe(low_probe(len(simulation.probes), location, self))
 
-    def formula_1(self, x1, y1, x2, y2):
-        return (y2 - y1) / (x2 - x1)
+    def try_red_alert(self, value):
+        if (red_alert().interval.contains(value)):
+            simulation.update(self, [["RED ALERT!!!"]])
 
-    def formula_2(self, x1, y1, r1, x2, y2, r2):
-        return ((r1**2 - r2**2) - (x1**2 - x2**2) - (y1**2 - y2**2)) / (2 * (x2 - x1))
-
-    def formula_0(self, y1, r1, y2, r2):
-        return ((r1**2 - r2**2) - (y1**2 - y2**2)) / (2 * (y2 - y1))
-
-    def formula_3(self, probe_1, probe_2, probe_3):
-        r1 = 0
-        r2 = 0
-        r3 = 0
-
-        v1 = probe_1.location
-        v2 = probe_2.location
-        v3 = probe_3.location
-
-        x1 = v1[0]
-        x2 = v2[0]
-        x3 = v3[0]
-
-        y1 = v1[1]
-        y2 = v2[1]
-        y3 = v3[1]
-
-        if (x3 - x1 == 0 or x3 - x2 == 0):
-            return (-1, -1)
-        else:
-            c1 = self.formula_2(x1, y1, r1, x3, y3, r3)
-            c2 = self.formula_2(x2, y2, r2, x3, y3, r3)
-
-            a1 = self.formula_1(x1, y1, x3, y3)
-            a2 = self.formula_1(x2, y2, x3, y3)
-
-            a = a1 - a2
-
-            if (a == 0):
-                return (c1, 0)
-            else:
-                y = (c1 - c2) / a
-                return (c1 - a1 * y, y)
+    def try_yellow_alert(self, value):
+        if (yellow_alert().interval.contains(value)):
+            simulation.update(self, [["Yellow alert!"]])
 
     def awareness(self, message):
         if len(simulation.probes) >= 3:
             #self.value = self.formula_3(simulation.probes[0], simulation.probes[1], simulation.probes[2])
-            simulation.update(self, [(6, str(self.value))])
+            simulation.update(self, [[4, self.value]])
 
     def strategy(self):
         if len(simulation.probes) == 0:
-            self.create_perfect_probe((5,))
-            self.create_perfect_probe((6,))
-            self.create_perfect_probe((7,))
-            self.create_low_probe((20,))
+            for n in range(1, random.randint(2, 20)):
+                self.create_high_probe([random.randint(20, 90)])
+
+            for n in range(1, random.randint(2, 20)):
+                self.create_low_probe([random.randint(20, 90)])
 
     def __init__(self, location, balance):
-        super().__init__("blu", location, self.no_movement, self.awareness, self.strategy, balance)
+        self.balance = balance
+        self.value = -1
+        csv_content = []
+        csv_content.append("ship")
+        csv_content.append(location)
+        csv_content.append(self.balance)
+        csv_content.append(self.value)
+
+        # Create log
+        simulation.put(csv_content)
+
+        movable.__init__(self, "ship", "ship", location, self.no_movement)
+        awareable.__init__(self, self.awareness)
+        decidable.__init__(self, self.strategy)
+
+    def __hash__(self):
+        return movable.__hash__(self)
 
     def __hash__(self):
         return super().__hash__()
 
-class offensive_submarine(submarine):
+class submarine(movable, awareable, decidable):
     def move_to_submarine(self):
-        velocity = tuple(map(lambda value: -value, self.location))
+        velocity = list(map(lambda value: -value, self.location))
         norm = math.sqrt(functools.reduce(lambda acc, value: acc + value**2, velocity, 0))
         if norm == 0:
             return
-        normalized_vector = tuple(map(lambda value: value / norm, velocity))
-        self.location = tuple(map(lambda value: value[0] + value[1], zip(self.location, normalized_vector)))
+        normalized_vector = list(map(lambda value: value / norm, velocity))
+        self.location = list(map(lambda value: value[0] + value[1], zip(self.location, normalized_vector)))
 
         for _, handler in simulation.awareness_handlers.items():
             if handler.state.type_id == "probe" and len(simulation.probes) >= handler.state.id:
                 handler.state.client_socket.send(str(self.location).encode('ascii'))
-        simulation.update(self, [(4, self.location)])
+        simulation.update(self, [[2, self.location]])
 
     def awareness(self, message):
         pass
 
     def hack_random_probe(self):
-        #time.sleep(9)
-        #world.darknet.append(random.randint(0, 5))
-        #threading.Timer(1, self.hack_random_probe).start()
+        time.sleep(5)
+
+        hack_probe = random.choice(list(simulation.awareness_handlers.values()))
+        while hack_probe.state.type_id != "probe" and len(simulation.probes) >= hack_probe.state.id:
+            hack_probe = random.choice(list(simulation.awareness_handlers.values()))
+        
+        hack_probe.state.client_socket.send("submarine".encode('ascii'))
+
         pass
 
-    def __init__(self, location, balance):
-        super().__init__("red", location, self.move_to_submarine, self.awareness, self.hack_random_probe, 100)
+    def __init__(self, location):
+        csv_content = []
+        csv_content.append("submarine")
+        csv_content.append(location)
+
+        # Create log
+        simulation.put(csv_content)
+
+        movable.__init__(self, "submarine", "submarine", location, self.move_to_submarine)
+        awareable.__init__(self, self.awareness)
+        decidable.__init__(self, self.hack_random_probe)
 
     def __hash__(self):
         return super().__hash__()
 
+#intervals.test()
+
 simulation.start()
 while(True):
-    simulation.submarines.append(defensive_submarine((0,), 100))
-    simulation.submarines.append(offensive_submarine((10,), 100))
+    simulation.submarines.append(ship([0], 500))
+    simulation.submarines.append(submarine([100]))
 
     while(simulation.reset_condition()):
         time.sleep(1 / simulation_handler.frame_per_second)
