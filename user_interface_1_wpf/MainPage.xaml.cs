@@ -95,7 +95,7 @@ namespace user_interface_1_wpf
             + "\nLocal: " + parameters[02].Replace("\"", "")
             + "\nBalan: " + parameters[03].Replace("\"", "")
             + "\nValue: " + parameters[04].Replace("\"", "")
-            + (parameters.Count() > 05 ? "\nProbes:\n - " + String.Join("\n - ", parameters.Skip(05)) : "")
+            + (parameters.Count() > 05 ? "\nAlerts:\n - " + String.Join("\n - ", parameters.Skip(05)) : "")
             ;
         private String submarine_text(String[] parameters)
             => parameters[01]
@@ -107,7 +107,7 @@ namespace user_interface_1_wpf
             ;
         private Thickness probe_thickness (String[] parameters)
             => new Thickness
-                ( 250 + 168 * (Int32.Parse(parameters[02]) % 4)
+                ( 250 + 174 * (Int32.Parse(parameters[02]) % 4)
                 , 040 + 62 * (Int32.Parse(parameters[02]) / 4)
                 , 00
                 , 00
@@ -151,7 +151,7 @@ namespace user_interface_1_wpf
                     , Width
                         = parameters[01] == "ship"      ? 200
                         : parameters[01] == "submarine" ? 200
-                        : 164
+                        : 170
                     , Child = new TextBlock()
                         { Margin = text_thickness
                         , Text

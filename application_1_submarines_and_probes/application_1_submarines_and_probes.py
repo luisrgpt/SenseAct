@@ -44,6 +44,9 @@ class simulation_handler(threading.Thread):
 
         self.submarines = []
         self.probes = []
+
+        self.lose_condition_is_not_satisfied = True
+        self.win_condition_is_not_satisfied = True
         self.lock.release()
 
     def __init__(self):
@@ -52,14 +55,6 @@ class simulation_handler(threading.Thread):
         self.restart()
 
         self.awareness_handlers = {}
-
-    def reset_condition(self):
-        if len(self.submarines) < 2:
-            return True
-
-        reset_condition = any(value[0] != value[1] for value in zip(self.submarines[0].location, self.submarines[1].location))
-
-        return reset_condition
 
     def put(self, csv_content):
         csv_content = list(map(lambda value:  str(value), csv_content))
@@ -84,6 +79,9 @@ class simulation_handler(threading.Thread):
             index = submarine_or_probe.type_id + "_" + str(submarine_or_probe.id)
         else:
             index = submarine_or_probe.type_id
+
+        if not index in self.dictionary:
+            return
 
         self.lock.acquire()
         csv_content = self.dictionary[index]
@@ -142,7 +140,7 @@ class movement_handler(threading.Thread):
         self.state = state
 
     def run(self):
-        while(simulation.reset_condition()):
+        while simulation.win_condition_is_not_satisfied and simulation.lose_condition_is_not_satisfied:
             self.state.movement()
             time.sleep(1 / simulation_handler.frame_per_second)
 
@@ -199,17 +197,20 @@ class awareness_handler(threading.Thread):
     def run(self):
         while(True):
             # Establish connection
-            client_socket, _ = self.state.socket.accept()
-            # Receive message
-            self.socket_handlers.append(socket_handler(self.state, client_socket))
-            self.socket_handlers[-1].start()
+            self.client_socket, _ = self.state.socket.accept()
+
+            if self.state.type_id != "ship":
+                # Receive message
+                self.socket_handlers.append(socket_handler(self.state, self.client_socket))
+                self.socket_handlers[-1].start()
+            else:
+                time.sleep(1000000)
 
 class awareable:
     def no_awareness(message):
         pass
 
     def __init__(self, awareness = no_awareness):
-        self.memory = []
         self.awareness = awareness
 
         # Get port
@@ -292,18 +293,18 @@ class probe(movable, awareable):
     def movement(self):
         pass
 
-    def awareness(self, message):
-        if message == "submarine":
+    def awareness(self, request):
+        if request == "submarine":
             simulation.update(self, [["HACKED!!!"]])
-        elif message == "probe":
+        elif request == "ship":
             # Send message
-            message = self.value.encode("ascii")
-            self.owner.client_socket.send(message)
+            reply = self.value.encode("ascii")
+            self.owner.client_socket.send(reply)
         else:
             # Parse message
-            submarine_location = ast.literal_eval(message)
+            submarine_location = ast.literal_eval(request)
             # Calculate measurements
-            distance = math.sqrt(functools.reduce(lambda acc, value: acc + (value[0] - value[1])**2, zip(self.location, submarine_location), 0))
+            distance = math.sqrt(sum((value[0] - value[1])**2 for value in zip(self.location, submarine_location)))
             if distance <= self.precision:
                 self.value = "yes"
                 # Update log
@@ -318,10 +319,16 @@ class probe(movable, awareable):
         self.precision : int = precision
         self.value : int = "no"
         self.owner = owner
+        self.interval = []
+        for value in location:
+            interval_left  = intervals.left_endpoint(value - precision, True, False)
+            interval_right = intervals.right_endpoint(value + precision, True, False)
+            interval_expression = intervals.interval_expression([intervals.interval(interval_left, interval_right)])
+            self.interval.append(interval_expression)
         csv_content = []
         csv_content.append("probe")
         csv_content.append(id)
-        csv_content.append(list(map(lambda value: intervals.interval(value - precision, value + precision, intervals.limit.open, intervals.limit.open), location)))
+        csv_content.append(self.interval)
         csv_content.append(self.value)
 
         # Create log
@@ -359,17 +366,30 @@ class perfect_probe(probe) :
 # Alert
 
 class alert:
-    def __init__(self, range, cost):
-        self.interval = range
+    def __init__(self, range, cost, message):
+        self.range = range
         self.cost = cost
+        self.message = message
+
+    def trigger(self):
+        pass
 
 class red_alert(alert):
     def __init__(self):
-        super().__init__(intervals.interval(40, 45, intervals.limit.closed, intervals.limit.closed), 10)
+        interval_left  = intervals.left_endpoint(40, False, True)
+        interval_right = intervals.right_endpoint(45, False, True)
+        interval_expression = intervals.interval_expression([intervals.interval(interval_left, interval_right)])
+        super().__init__([interval_expression], 10, "RED ALERT!!!")
+
+    def trigger(self):
+        simulation.win_condition_is_not_satisfied = False
 
 class yellow_alert(alert):
     def __init__(self):
-        super().__init__(intervals.interval(45, 70, intervals.limit.open, intervals.limit.closed), 5)
+        interval_left  = intervals.left_endpoint(45, True, False)
+        interval_right = intervals.right_endpoint(70, False, True)
+        interval_expression = intervals.interval_expression([intervals.interval(interval_left, interval_right)])
+        super().__init__([interval_expression], 5, "Yellow alert!")
 
 ###############################################################################
 # Submarine
@@ -392,10 +412,14 @@ class ship(movable, awareable, decidable):
     def no_movement(self):
         pass
 
+    def create_alert(self, alert):
+        self.alerts.append(alert)
+        simulation.update(self, [[3, self.balance], [alert.range]])
+        return self
+
     def create_probe(self, probe):
         self.balance -= probe.cost
         simulation.probes.append(probe)
-        simulation.update(self, [[3, self.balance], [probe.id]])
         return self
 
     def create_perfect_probe(self, location):
@@ -407,30 +431,62 @@ class ship(movable, awareable, decidable):
     def create_low_probe(self, location):
         return self.create_probe(low_probe(len(simulation.probes), location, self))
 
-    def try_red_alert(self, value):
-        if (red_alert().interval.contains(value)):
-            simulation.update(self, [["RED ALERT!!!"]])
-
-    def try_yellow_alert(self, value):
-        if (yellow_alert().interval.contains(value)):
-            simulation.update(self, [["Yellow alert!"]])
+    def try_alert(self, alert, value):
+        if all(zip_value[0].contains(zip_value[1]) for zip_value in zip(alert.range, value)):
+            if self.balance > alert.cost:
+                self.balance -= alert.cost
+                simulation.update(self, [[3, self.balance], [alert.message]])
+                alert.trigger()
+            else:
+                simulation.update(self, [["low energy"]])
 
     def awareness(self, message):
-        if len(simulation.probes) >= 3:
-            #self.value = self.formula_3(simulation.probes[0], simulation.probes[1], simulation.probes[2])
-            simulation.update(self, [[4, self.value]])
+        pass
 
     def strategy(self):
-        if len(simulation.probes) == 0:
-            for n in range(1, random.randint(2, 20)):
-                self.create_high_probe([random.randint(20, 90)])
+        while simulation.win_condition_is_not_satisfied and simulation.lose_condition_is_not_satisfied:
+            if len(simulation.probes) == 0:
+                for n in range(1, random.randint(2, 20)):
+                    self.create_high_probe([random.randint(20, 90)])
 
-            for n in range(1, random.randint(2, 20)):
-                self.create_low_probe([random.randint(20, 90)])
+                for n in range(1, random.randint(2, 20)):
+                    self.create_low_probe([random.randint(20, 90)])
+
+                self.create_alert(red_alert())
+            else:
+                self.probes = []
+                self.value = []
+                for value in self.location:
+                    self.value.append(intervals.interval_expression.domain())
+
+                for element in simulation.probes:
+                    request = self.type_id.encode("ascii")
+                    element.client_socket.send(request)
+                    reply = simulation.awareness_handlers[10040].client_socket.recv(3).decode("ascii")
+                    self.probes.append(element)
+                    zip_interval_expressions = zip(self.value, element.interval)
+
+                    if reply == "yes":
+                        lambda_intersection = lambda value: value[0].intersection(value[1])
+                    #else:
+                    #    lambda_intersection = lambda value: value[0].intersection(value[1].negation())
+
+                        self.value = list(map(lambda_intersection, zip_interval_expressions))
+
+                simulation.update(self, [[4, self.value]])
+
+                for trigger in self.alerts:
+                    self.try_alert(trigger, self.value)
+
+            time.sleep(1 / simulation_handler.frame_per_second)
 
     def __init__(self, location, balance):
         self.balance = balance
-        self.value = -1
+        self.value = []
+        for value in location:
+            self.value.append(intervals.interval_expression.domain())
+        self.alerts = []
+        self.probes = []
         csv_content = []
         csv_content.append("ship")
         csv_content.append(location)
@@ -453,15 +509,17 @@ class ship(movable, awareable, decidable):
 class submarine(movable, awareable, decidable):
     def move_to_submarine(self):
         velocity = list(map(lambda value: -value, self.location))
-        norm = math.sqrt(functools.reduce(lambda acc, value: acc + value**2, velocity, 0))
+        norm = math.sqrt(sum(value**2 for value in velocity))
         if norm == 0:
+            simulation.lose_condition_is_not_satisfied = False
             return
         normalized_vector = list(map(lambda value: value / norm, velocity))
         self.location = list(map(lambda value: value[0] + value[1], zip(self.location, normalized_vector)))
 
-        for _, handler in simulation.awareness_handlers.items():
-            if handler.state.type_id == "probe" and len(simulation.probes) >= handler.state.id:
-                handler.state.client_socket.send(str(self.location).encode('ascii'))
+        request = str(self.location).encode("ascii")
+        for client in simulation.probes:
+            client.client_socket.send(request)
+
         simulation.update(self, [[2, self.location]])
 
     def awareness(self, message):
@@ -470,13 +528,9 @@ class submarine(movable, awareable, decidable):
     def hack_random_probe(self):
         time.sleep(5)
 
-        hack_probe = random.choice(list(simulation.awareness_handlers.values()))
-        while hack_probe.state.type_id != "probe" and len(simulation.probes) >= hack_probe.state.id:
-            hack_probe = random.choice(list(simulation.awareness_handlers.values()))
+        random_probe_socket = random.choice(list(simulation.probes)).client_socket
         
-        hack_probe.state.client_socket.send("submarine".encode('ascii'))
-
-        pass
+        random_probe_socket.send(self.type_id.encode("ascii"))
 
     def __init__(self, location):
         csv_content = []
@@ -500,6 +554,6 @@ while(True):
     simulation.submarines.append(ship([0], 500))
     simulation.submarines.append(submarine([100]))
 
-    while(simulation.reset_condition()):
+    while simulation.win_condition_is_not_satisfied and simulation.lose_condition_is_not_satisfied:
         time.sleep(1 / simulation_handler.frame_per_second)
     simulation.restart()
