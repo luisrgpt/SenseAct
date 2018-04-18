@@ -101,14 +101,11 @@ namespace user_interface_1_wpf
             => parameters[01]
             + "\nLocal: " + parameters[02].Replace("\"", "")
             ;
-        private String probe_text (String[] parameters)
-            => parameters[01] + ": " + parameters[02]
-            + "\nLocal: " + parameters[03].Replace("\"", "")
-            ;
+        private String probe_text (String[] parameters) => parameters[03].Replace("\"", "");
         private Thickness probe_thickness (String[] parameters)
             => new Thickness
-                ( 250 + 174 * (Int32.Parse(parameters[02]) % 4)
-                , 040 + 62 * (Int32.Parse(parameters[02]) / 4)
+                ( 250 + 112 * (Int32.Parse(parameters[02]) % 7)
+                , 040 + 41 * (Int32.Parse(parameters[02]) / 7)
                 , 00
                 , 00
                 );
@@ -138,11 +135,11 @@ namespace user_interface_1_wpf
                         = parameters[01] == "submarine" ? HorizontalAlignment.Right
                         : HorizontalAlignment.Left
                     , Background
-                        = parameters[01] == "ship"                         ? ship_brush
-                        : parameters[01] == "submarine"                    ? submarine_brush
-                        : parameters.Length == 5 && parameters[04] == "no" ? probe_brush
-                        : parameters.Length == 5                           ? active_probe_brush
-                        : parameters[04] == "no"                           ? hacked_probe_brush
+                        = parameters[01] == "ship"                            ? ship_brush
+                        : parameters[01] == "submarine"                       ? submarine_brush
+                        : parameters.Length == 5 && parameters[04] == "False" ? probe_brush
+                        : parameters.Length == 5                              ? active_probe_brush
+                        : parameters[04] == "False"                           ? hacked_probe_brush
                         : active_hacked_probe_brush
                     , Margin
                         = parameters[01] == "ship"      ? ship_thickness
@@ -151,7 +148,7 @@ namespace user_interface_1_wpf
                     , Width
                         = parameters[01] == "ship"      ? 200
                         : parameters[01] == "submarine" ? 200
-                        : 170
+                        : 110
                     , Child = new TextBlock()
                         { Margin = text_thickness
                         , Text

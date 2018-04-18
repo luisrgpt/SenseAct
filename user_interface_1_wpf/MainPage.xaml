@@ -7,6 +7,8 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-    </Grid>
+    <ScrollViewer>
+        <Grid Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        </Grid>
+    </ScrollViewer>
 </Page>
