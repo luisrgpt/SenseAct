@@ -95,10 +95,17 @@
     <Compile Include="App.xaml.cs">
       <DependentUpon>App.xaml</DependentUpon>
     </Compile>
+    <Compile Include="BatchesItemViewModel.cs" />
+    <Compile Include="BatchesViewItem.cs" />
+    <Compile Include="BatchViewItem.cs" />
     <Compile Include="MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ShipItemViewModel.cs" />
+    <Compile Include="ShipViewItem.cs" />
+    <Compile Include="SubmarineItemViewModel.cs" />
+    <Compile Include="SubmarineViewItem.cs" />
   </ItemGroup>
   <ItemGroup>
     <AppxManifest Include="Package.appxmanifest">

@@ -4,13 +4,14 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>4abc6eba-cc1d-405d-9759-98fa1fbd1128</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>application_1_submarines_and_probes.py</StartupFile>
+    <StartupFile>application_1_submarines_and_probes.pyw</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <Name>application_1_submarines_and_probes</Name>
     <RootNamespace>application_1_submarines_and_probes</RootNamespace>
+    <IsWindowsApplication>True</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,8 +22,8 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="application_1_submarines_and_probes.py" />
-    <Compile Include="intervals.py">
+    <Compile Include="application_1_submarines_and_probes.pyw" />
+    <Compile Include="intervals.pyw">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>

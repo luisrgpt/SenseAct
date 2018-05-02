@@ -7,8 +7,197 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer>
-        <Grid Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        </Grid>
-    </ScrollViewer>
+    <Page.Resources>
+        <Style TargetType="TextBlock" x:Key="Text">
+            <Setter
+                Property="FocusVisualPrimaryBrush"
+                Value="White"/>
+            <Setter
+                Property="FontFamily"
+                Value="Consolas"/>
+            <Setter
+                Property="FontSize"
+                Value="12"/>
+        </Style>
+    </Page.Resources>
+
+    <NavigationView
+        CompactModeThresholdWidth="1920"
+        ExpandedModeThresholdWidth="1920">
+        <Frame>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="auto"/>
+                </Grid.RowDefinitions>
+                <Grid
+                    Background="#FF0078D7"
+                    Grid.Column="0"
+                    Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <ListView
+                        Grid.Column="0">
+                        <TextBlock
+                            Style="{StaticResource Text}"
+                            Text="Ship location:"/>
+                        <TextBlock
+                            Style="{StaticResource Text}"
+                            Text="Inference:"/>
+                        <TextBlock
+                            Style="{StaticResource Text}"
+                            Text="Total Cost:"/>
+                    </ListView>
+                    <ListView
+                        Grid.Column="1"
+                        ItemsSource="{x:Bind ship.ShipViewItems}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:ShipViewItem">
+                                <TextBlock
+                                    Style="{StaticResource Text}"
+                                    Text="{x:Bind Attribute}"/>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+                <Grid
+                    Background="#FFE74856"
+                    Grid.Column="1"
+                    Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <ListView Grid.Column="0">
+                        <TextBlock
+                            Style="{StaticResource Text}"
+                            Text="Submarine location:"/>
+                    </ListView>
+                    <ListView
+                        Grid.Column="1"
+                        ItemsSource="{x:Bind submarine.SubmarineViewItems}">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:SubmarineViewItem">
+                                <TextBlock
+                                    Style="{StaticResource Text}"
+                                    Text="{x:Bind Attribute}"/>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+                <ScrollViewer
+                    Grid.Row="1"
+                    Grid.ColumnSpan="2">
+                    <GridView
+                        ItemsSource="{x:Bind batches.BatchesViewItems}">
+                        <GridView.ItemTemplate>
+                            <DataTemplate
+                                x:DataType="local:BatchesViewItem">
+                                <Grid
+                                    Background="#FF627588"
+                                    Width="364"
+                                    Height="auto">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ListView
+                                        Grid.Column="0">
+                                        <TextBlock
+                                            Style="{StaticResource Text}"
+                                            Text="Timestamp:"/>
+                                        <TextBlock
+                                            Style="{StaticResource Text}"
+                                            Text="Measurements:"/>
+                                    </ListView>
+                                    <ListView
+                                        Grid.Column="1"
+                                        ItemsSource="{x:Bind BatchViewItems}">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="local:BatchViewItem">
+                                                <TextBlock
+                                                    Style="{StaticResource Text}"
+                                                    Text="{x:Bind Attribute}"/>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Grid>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                        <!--<GridViewItem>
+                            <Grid
+                                Background="#FF627588"
+                                Width="auto"
+                                Height="auto">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="auto"/>
+                                    <ColumnDefinition Width="auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ListView
+                                    Grid.Column="0">
+                                    <TextBlock
+                                        Style="{StaticResource Text}"
+                                        Text="Measurements:"/>
+                                </ListView>
+                                <ListView
+                                    Grid.Column="1">
+                                    <TextBlock
+                                        Style="{StaticResource Text}"
+                                        Text="[[100.0..100.0]] or [[100.0..100.0]]"/>
+                                </ListView>
+                            </Grid>
+                        </GridViewItem>-->
+                    </GridView>
+                </ScrollViewer>
+                <ListView
+                    Grid.Row="2"
+                    Grid.ColumnSpan="2">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <Button
+                        Click="OnPreviousClick"
+                        HorizontalAlignment="Center"
+                        Name="Previous">
+                        <SymbolIcon Symbol="Previous"/>
+                    </Button>
+                    <Button
+                        Click="OnNextClick"
+                        HorizontalAlignment="Center"
+                        Name="Next">
+                        <SymbolIcon Symbol="Next"/>
+                    </Button>
+                    <Button
+                        Click="OnPauseClick"
+                        HorizontalAlignment="Center"
+                        Name="Pause">
+                        <SymbolIcon Symbol="Pause"/>
+                    </Button>
+                    <Button
+                        Click="OnStopClick"
+                        HorizontalAlignment="Center"
+                        Name="Stop">
+                        <SymbolIcon Symbol="Stop"/>
+                    </Button>
+                    <Button
+                        Click="OnRepeatAllClick"
+                        HorizontalAlignment="Center"
+                        Name="RepeatAll">
+                        <SymbolIcon Symbol="RepeatAll"/>
+                    </Button>
+                </ListView>
+            </Grid>
+        </Frame>
+    </NavigationView>
 </Page>

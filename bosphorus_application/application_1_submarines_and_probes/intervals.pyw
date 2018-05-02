@@ -168,13 +168,16 @@ class Interval:
         return self.is_bounded() and self.is_closed() and self.left.value == self.right.value
 
     def is_half_open(self) -> bool:
-        return self.left.is_open != self.right.is_open and self.left.is_close != self.right.is_close
+        return self.left.is_open != self.right.is_open and self.left.is_closed != self.right.is_closed
 
     def is_half_bounded(self) -> bool:
         return self.left.is_bounded() != self.right.is_bounded()
 
+    def is_not_bounded(self) -> bool:
+        return not self.is_bounded()
+
     def is_proper(self) -> bool:
-        return self.is_unbounded() or self.is_half_bounded() or self.left.value < self.right.value
+        return self.is_not_bounded() or self.left.value < self.right.value
 
     def is_empty(self) -> bool:
         return not self.is_degenerated() and not self.is_proper()
@@ -224,15 +227,20 @@ class IntervalExpression:
     def __init__(self, intervals: list):
         self.intervals = sorted(list(filter(lambda value: value.is_not_empty(), intervals)))
 
-    def is_empty(self) -> bool:
-        return len(self.intervals) == 0
+    def __eq__(self, other):
+        if len(self.intervals) == 0:
+            return len(other.intervals) == 0
+        elif len(other.intervals) == 0:
+            return False
+        else:
+            return all(value[0] == value[1] for value in zip(self.union().intervals, other.union().intervals))
 
-    def is_not_empty(self) -> bool:
-        return not self.is_empty()
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __repr__(self):
         return functools.reduce(lambda acc, value: str(acc) + (' or ' if acc != '' else '') + str(value), self.intervals, '') \
-            if self.is_not_empty() else '()'
+            if self != IntervalExpression.empty() else '()'
 
     @classmethod
     def empty(cls):
@@ -275,7 +283,7 @@ class IntervalExpression:
         return IntervalExpression(acc)
 
     def negation(self):
-        if self.is_empty():
+        if self == IntervalExpression.empty():
             return IntervalExpression.domain()
 
         acc = []
@@ -298,25 +306,28 @@ class IntervalExpression:
 
         sorted_acc = sorted(acc)
         acc, sorted_acc = [sorted_acc[0]], sorted_acc[1:]
-       #print('-------------------------')
+        #print('-------------------------')
         while len(sorted_acc) > 0:
-           #print(str(acc) + '---------' + str(sorted_acc))
+            #print(str(acc) + '---------' + str(sorted_acc))
             fst, acc = acc[-1], acc[:-1]
             snd, sorted_acc = sorted_acc[0], sorted_acc[1:]
             
-           #print(str(fst) + ':' + str(snd))
+            #print(str(fst) + ':' + str(snd))
             left  = max(fst.left,  snd.left)
             right = min(fst.right, snd.right)
             value = Interval(left, right)
-           #print('union: ' + str(value))
+            #print('union: ' + str(value))
             if value.is_not_empty():
                 acc += [value]
                 if snd.right > value.right and snd.right.is_bounded() and len(sorted_acc) > 0:
                     for index in range(len(sorted_acc)):
-                       #print('-------------' + str(sorted_acc[index]) + ' is ' + str(sorted_acc[index].left.is_bounded()))
+                        #print('-------------' + str(sorted_acc[index]) + ' is ' + str(sorted_acc[index].left.is_bounded()))
                         if sorted_acc[index].left.is_bounded():
                             sorted_acc = sorted_acc[:index + 1] + [snd] + sorted_acc[index + 1:]
                             break
+            elif value.is_half_open() and value.left.value == value.right.value:
+                value = Interval(fst.left, snd.right)
+                acc += [value]
             else:
                 acc += [fst, snd]
            #print(str(acc))
@@ -341,6 +352,7 @@ class IntervalExpression:
         #print('(' + str(self) + ') and (' + str(other) + ')')
         #print('not ' + str(self) + ' = ' + str(not_self))
         #print('not ' + str(other) + ' = ' + str(not_other))
+        #print(str(not_self) + " u " + str(not_other) + ' = ' + str(not_result))
         #print('not ' + str(not_result) + ' = ' + str(result))
         #if result.intervals[-1].right.is_unbounded():
         #    print('')
@@ -351,12 +363,12 @@ class IntervalExpression:
         return result
 
     def contains(self, other):
-        if self.is_empty() or other.is_empty():
+        if self == IntervalExpression.empty() or other == IntervalExpression.empty():
             return False
 
         and_interval_expression = self.intersection(other)
         
-        if and_interval_expression.is_empty():
+        if and_interval_expression == IntervalExpression.empty():
             return False
         else:
             return all(value[0] == value[1] for value in zip(other.intervals, and_interval_expression.intervals))
@@ -369,7 +381,7 @@ class IntervalExpression:
         for self_interval in self.intervals:
             self_left = self_interval.left
             self_right = self_interval.right
-            
+
             self_absolute = (self_right.value - self_left.value) / 2
             self_center = self_left.value + self_absolute
             self_uncertainty = AbsoluteUncertainty(self_center, self_absolute)
@@ -432,21 +444,26 @@ def test():
     r4 = RightEndpoint(0, True, True)  # HIGH)
     r5 = RightEndpoint(0, False, True) # 0]
     r6 = RightEndpoint(0, True, False) # 0)
+    r7 = RightEndpoint(5, False, True) # 5]
 
-    i0 = Interval(l1, r1) # (LOW, HIGH)
-    i1 = Interval(l1, r2) # (LOW, 1]
-    i2 = Interval(l1, r3) # (LOW, 1)
-    i3 = Interval(l2, r1) # [0, HIGH)
-    i4 = Interval(l2, r2) # [0, 1]
-    i5 = Interval(l2, r3) # [0, 1)
-    i6 = Interval(l3, r1) # (0, HIGH)
-    i7 = Interval(l3, r2) # (0, 1]
-    i8 = Interval(l3, r3) # (0, 1)
-    i9 = Interval(l5, r5) # [1, 0] -> ()
+    i0 = Interval(l1, r1) # (LOW..HIGH)
+    i1 = Interval(l1, r2) # (LOW..1]
+    i2 = Interval(l1, r3) # (LOW..1)
+    i3 = Interval(l2, r1) # [0..HIGH)
+    i4 = Interval(l2, r2) # [0..1]
+    i5 = Interval(l2, r3) # [0..1)
+    i6 = Interval(l3, r1) # (0..HIGH)
+    i7 = Interval(l3, r2) # (0..1]
+    i8 = Interval(l3, r3) # (0..1)
+    i9 = Interval(l5, r5) # [1..0] -> ()
+    i10 = Interval(l1, r6) # (LOW..0)
+    i11 = Interval(l6, r1) # (1..HIGH)
+    i12 = Interval(l2, r7) # [0..5]
 
     e0 = IntervalExpression.empty() # ()
-    e1 = IntervalExpression.domain() # (LOW, HIGH)
+    e1 = IntervalExpression.domain() # (LOW..HIGH)
 
+    print(str(e0.union(i10).union(i11)) + ' n ' + str(i12) + ' = ' + str(e0.union(i10).union(i11).intersection(i12)))
    #print('-----------------------')
    #print('left_endpoint:')
    #print('')

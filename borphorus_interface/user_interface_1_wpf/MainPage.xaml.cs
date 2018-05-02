@@ -3,148 +3,329 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Threading.Tasks;
-using Windows.UI;
+using Windows.ApplicationModel;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
 
-// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
+// The Blank Page item template is documented at
+// https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
 namespace user_interface_1_wpf
 {
-    /// <summary>
-    /// An empty page that can be used on its own or navigated to within a Frame.
-    /// </summary>
-    public sealed partial class MainPage : Page
+/// <summary>
+/// An empty page that can be used on its own or navigated
+/// to within a Frame.
+/// </summary>
+public sealed partial class MainPage : Page
+{
+private const string path_name = "./";
+
+private TcpClient socket_client;
+private NetworkStream stream;
+private ShipItemViewModel ship
+    = new ShipItemViewModel();
+private SubmarineItemViewModel submarine
+    = new SubmarineItemViewModel();
+private BatchesItemViewModel batches
+    = new BatchesItemViewModel();
+
+public MainPage()
+{
+    InitializeComponent();
+
+    var thread = new Thread(OnThreadStartAsync);
+    thread.Start();
+}
+
+private void OnSuspending(
+    object sender,
+    SuspendingEventArgs e)
+{
+    //Debug.WriteLine("quit");
+
+    var data = Encoding.UTF8.GetBytes("quit");
+    stream.Write(data, 0, data.Length);
+    socket_client.Close();
+}
+
+private async void OnThreadStartAsync() {
+    var server = Dns.GetHostName();
+    var port = 3000;
+
+    var size = 10000;
+    var data = new byte[size];
+
+    var encoding = Encoding.UTF8;
+
+    var separator = new char[] { '\r', '\n' };
+    var options = StringSplitOptions.RemoveEmptyEntries;
+
+    var pattern = ",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))";
+    var csv_regex = new Regex(pattern);
+
+    var priority = CoreDispatcherPriority.Normal;
+
+    socket_client = new TcpClient(server, port);
+    stream = socket_client.GetStream();
+
+    Application.Current.Suspending += OnSuspending;
+
+    try
     {
-        private const string path_name = "./";
-        
-        public MainPage()
+        while (true)
         {
-            InitializeComponent();
+            var count = stream.Read(
+                buffer: data,
+                offset: 0,
+                size: size
+            );
+            var responses = encoding.GetString(
+                bytes: data,
+                index: 0,
+                count: count
+            ).Split(
+                separator: separator,
+                options: options
+            );
 
-            Thread thread = new Thread(OnThreadStart);
-            thread.Start();
-        }
-
-        private void OnThreadStart() {
-            String server = Dns.GetHostName();
-            Int32 port = 3000;
-            TcpClient socket_client = new TcpClient(server, port);
-            using (NetworkStream stream = socket_client.GetStream())
+            foreach (var response in responses)
             {
-                Byte[] data = new Byte[256];
-                String responseData = String.Empty;
-
-                while (true)
-                {
-                    Int32 bytes = stream.Read(data, 0, data.Length);
-                    responseData = System.Text.Encoding.ASCII.GetString(data, 0, bytes);
-                    String[] parameters = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*(?![^\"]*\"))").Split(responseData);
-                    Task.Factory.StartNew(() => Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => UpdatePage(parameters)));
-                }
-            }
-        }
-
-        private String ship_text(String[] parameters)
-            => parameters[01]
-            + "\nLocal: " + parameters[02].Replace("\"", "")
-            + "\nBalan: " + parameters[03].Replace("\"", "")
-            + "\nValue: " + parameters[04].Replace("\"", "")
-            + (parameters.Count() > 05 ? "\nAlerts:\n - " + String.Join("\n - ", parameters.Skip(05)) : "")
-            ;
-        private String submarine_text(String[] parameters)
-            => parameters[01]
-            + "\nLocal: " + parameters[02].Replace("\"", "")
-            ;
-        private String batch_text(String[] parameters) => String.Join("\n", parameters);
-
-        private int ship_width      = 210;
-        private int submarine_width = 200;
-        private int batch_width     = 250;
-
-        private Thickness batch_thickness (String[] parameters)
-            => new Thickness
-                ( 260 + (batch_width + 10) * ((Int32.Parse(parameters[02]) - 1) % 3)
-                , 040 + (150 + 41) * ((Int32.Parse(parameters[02]) - 1) / 3)
-                , 00
-                , 00
+                var csv = csv_regex.Split(response);
+                void agile_callback()
+                    => UpdatePage(csv);
+                await Dispatcher.RunAsync(
+                    priority: priority,
+                    agileCallback: agile_callback
                 );
-
-        private Thickness ship_thickness      = new Thickness(40, 40, 00, 40);
-        private Thickness submarine_thickness = new Thickness(00, 40, 40, 40);
-        private Thickness text_thickness      = new Thickness(10, 10, 10, 10);
-
-        private SolidColorBrush ship_brush                = new SolidColorBrush(new Color() { A = 0xFF, R = 0x00, G = 0x78, B = 0xD7 }); //Blue
-        private SolidColorBrush submarine_brush           = new SolidColorBrush(new Color() { A = 0xFF, R = 0xE7, G = 0x48, B = 0x56 }); //Red
-        private SolidColorBrush batch_brush               = new SolidColorBrush(new Color() { A = 0xFF, R = 0x62, G = 0x75, B = 0x88 }); //Blue Grey
-        private SolidColorBrush active_batch_brush        = new SolidColorBrush(new Color() { A = 0xFF, R = 0x00, G = 0x78, B = 0xD7 }); //Blue
-        private SolidColorBrush hacked_batch_brush        = new SolidColorBrush(new Color() { A = 0xFF, R = 0x90, G = 0x6B, B = 0x6E }); //Red Grey
-        private SolidColorBrush active_hacked_batch_brush = new SolidColorBrush(new Color() { A = 0xFF, R = 0xE7, G = 0x48, B = 0x56 }); //Red
-        private SolidColorBrush text_brush                = new SolidColorBrush(Colors.White);
-        private int timestamp = 0;
-        private void UpdatePage(string[] parameters)
-        {
-            Debug.WriteLine(timestamp + ": " + String.Join(",", parameters));
-
-            if (parameters.Length == 0)
-            {
-                foreach (Border border in Root.Children)
-                    Root.Children.Remove(border);
-
-                return;
-            }
-
-            Border new_border = (Border)FindName(parameters[01] + parameters[02]);
-            if (new_border == null)
-            {
-                Root.Children.Add(new Border()
-                    { VerticalAlignment
-                        = parameters[01] == "batch" ? VerticalAlignment.Top
-                        : VerticalAlignment.Stretch
-                    , HorizontalAlignment
-                        = parameters[01] == "submarine" ? HorizontalAlignment.Right
-                        : HorizontalAlignment.Left
-                    , Background
-                        = parameters[01] == "ship"                            ? ship_brush
-                        : parameters[01] == "submarine"                       ? submarine_brush
-                        : /*parameters.Length == 5 && parameters[04] == "False" ?*/ batch_brush
-                        //: parameters.Length == 5                              ? active_batch_brush
-                        //: parameters[04] == "False"                           ? hacked_batch_brush
-                        //: active_hacked_batch_brush
-                    , Margin
-                        = parameters[01] == "ship"      ? ship_thickness
-                        : parameters[01] == "submarine" ? submarine_thickness
-                        : batch_thickness(parameters)
-                    , Width
-                        = parameters[01] == "ship"      ? ship_width
-                        : parameters[01] == "submarine" ? submarine_width
-                        : batch_width
-                    , Child = new TextBlock()
-                        { Margin = text_thickness
-                        , Text
-                            = parameters[01] == "ship"      ? ship_text(parameters)
-                            : parameters[01] == "submarine" ? submarine_text(parameters)
-                            : batch_text(parameters)
-                        , TextWrapping            = TextWrapping.Wrap
-                        , FocusVisualPrimaryBrush = text_brush
-                        , FontFamily              = new FontFamily("Consolas")
-                        , FontSize                = 16
-                        }
-                    }
-                );
-            }
-            else
-            {
-                ((TextBlock)new_border.Child).Text
-                    = parameters[01] == "ship"      ? ship_text(parameters)
-                    : parameters[01] == "submarine" ? submarine_text(parameters)
-                    : batch_text(parameters);
             }
         }
     }
+    catch (Exception) {
+        Environment.Exit(0);
+    }
+}
+
+private void UpdatePage(string[] csv)
+{
+    if (csv[0] == "reset")
+        ResetPage();
+    else if (csv[1] == "ship")
+        UpdateShip(csv);
+    else if (csv[1] == "submarine")
+        UpdateSubmarine(csv);
+    else if (csv[1] == "batch")
+        UpdateBatches(csv);
+}
+
+private void UpdateBatches(string[] csv)
+{
+    bool predicate(BatchesViewItem item)
+        => item.BatchViewItems[0].Attribute == csv[2];
+    var batch = batches.BatchesViewItems.FirstOrDefault(
+        predicate: predicate
+    );
+    if (csv.Length == 3)
+    {
+        batches.BatchesViewItems.Remove(batch);
+        return;
+    }
+
+    var index = 0;
+    if (batch == null)
+    {
+        batch = new BatchesViewItem();
+        batches.BatchesViewItems.Add(batch);
+        for (; index < csv.Length - 2; index++)
+        {
+            var item = new BatchViewItem();
+            batch.BatchViewItems.Add(item);
+        }
+    }
+
+    index = 0;
+    for (; index < csv.Length - 2; index++)
+    {
+        batch.BatchViewItems[index].Attribute
+            = csv[index + 2];
+
+        batch.BatchViewItems[index]
+            = batch.BatchViewItems[index];
+    }
+    for (; index < batch.BatchViewItems.Count(); index++)
+    {
+        batch.BatchViewItems.RemoveAt(csv.Length - 2);
+    }
+}
+
+private void UpdateSubmarine(string[] csv)
+{
+    if (submarine.SubmarineViewItems.Count == 1)
+    {
+        submarine.SubmarineViewItems[0].Attribute = csv[2];
+
+        submarine.SubmarineViewItems[0]
+            = submarine.SubmarineViewItems[0];
+    }
+    else
+    {
+        var location = new SubmarineViewItem()
+        {
+            Attribute = csv[2]
+        };
+
+        submarine.SubmarineViewItems.Add(location);
+    }
+}
+
+private void UpdateShip(string[] csv)
+{
+    if (ship.ShipViewItems.Count == 3)
+    {
+        ship.ShipViewItems[0].Attribute = csv[2];
+        ship.ShipViewItems[1].Attribute = csv[4];
+        ship.ShipViewItems[2].Attribute = csv[3];
+
+        ship.ShipViewItems[0] = ship.ShipViewItems[0];
+        ship.ShipViewItems[1] = ship.ShipViewItems[1];
+        ship.ShipViewItems[2] = ship.ShipViewItems[2];
+    }
+    else
+    {
+        var location = new ShipViewItem()
+        {
+            Attribute = csv[2]
+        };
+        var result = new ShipViewItem()
+        {
+            Attribute = csv[4]
+        };
+        var cost = new ShipViewItem()
+        {
+            Attribute = csv[3]
+        };
+
+        ship.ShipViewItems.Add(location);
+        ship.ShipViewItems.Add(result);
+        ship.ShipViewItems.Add(cost);
+    }
+}
+
+private void ResetPage()
+{
+    ship.ShipViewItems.Clear();
+    submarine.SubmarineViewItems.Clear();
+    batches.BatchesViewItems.Clear();
+}
+
+private void OnPreviousClick(
+    object sender,
+    RoutedEventArgs e)
+{
+
+}
+
+private void OnNextClick(
+    object sender,
+    RoutedEventArgs e)
+{
+
+}
+
+private void OnPauseClick(
+    object sender,
+    RoutedEventArgs e)
+{
+    var button = sender as Button;
+    button.IsEnabled = false;
+    button.Click -= OnPauseClick;
+
+    Stop.IsEnabled = false;
+    RepeatAll.IsEnabled = false;
+
+    var data = Encoding.UTF8.GetBytes("pause");
+    stream.Write(data, 0, data.Length);
+
+    var symbol_icon = button.Content as SymbolIcon;
+    symbol_icon.Symbol = Symbol.Play;
+
+    Stop.IsEnabled = true;
+    RepeatAll.IsEnabled = true;
+
+    button.Click += OnPlayClick;
+    button.IsEnabled = true;
+}
+
+private void OnPlayClick(
+    object sender,
+    RoutedEventArgs e)
+{
+    var button = sender as Button;
+    button.IsEnabled = false;
+    button.Click -= OnPlayClick;
+
+    Stop.IsEnabled = false;
+    RepeatAll.IsEnabled = false;
+
+    var data = Encoding.UTF8.GetBytes("play");
+    stream.Write(data, 0, data.Length);
+
+    var symbol_icon = button.Content as SymbolIcon;
+    symbol_icon.Symbol = Symbol.Pause;
+
+    Stop.IsEnabled = true;
+    RepeatAll.IsEnabled = true;
+
+    button.Click += OnPauseClick;
+    button.IsEnabled = true;
+}
+
+private void OnStopClick(
+    object sender,
+    RoutedEventArgs e)
+{
+    var button = sender as Button;
+    button.IsEnabled = false;
+
+    Pause.IsEnabled = false;
+    RepeatAll.IsEnabled = false;
+
+    var data = Encoding.UTF8.GetBytes("stop");
+    stream.Write(data, 0, data.Length);
+
+    ResetPage();
+
+    var pause_symbol_icon = Pause.Content as SymbolIcon;
+    if (pause_symbol_icon.Symbol == Symbol.Pause) {
+        Pause.Click -= OnPauseClick;
+        pause_symbol_icon.Symbol = Symbol.Play;
+        Pause.Click += OnPlayClick;
+    }
+
+    Pause.IsEnabled = true;
+    RepeatAll.IsEnabled = true;
+}
+
+private void OnRepeatAllClick(
+    object sender,
+    RoutedEventArgs e)
+{
+    var button = sender as Button;
+    button.IsEnabled = false;
+
+    Pause.IsEnabled = false;
+    Stop.IsEnabled = false;
+
+    var data = Encoding.UTF8.GetBytes("repeat_all");
+    stream.Write(data, 0, data.Length);
+
+    Pause.IsEnabled = true;
+    Stop.IsEnabled = true;
+
+    button.IsEnabled = true;
+}
+}
 }
