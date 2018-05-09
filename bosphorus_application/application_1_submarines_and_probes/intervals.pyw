@@ -185,6 +185,14 @@ class Interval:
     def is_not_empty(self) -> bool:
         return not self.is_empty()
 
+    def touches(self, other) -> bool:
+        possible_contacts = [Interval(self.left, other.right), Interval(other.left, self.right)]
+        return any(value.is_half_open() and value.left.value == value.right.value for value in possible_contacts)
+
+    def intersects(self, other) -> bool:
+        possible_contacts = [Interval(self.left, other.right), Interval(other.left, self.right)]
+        return all(value.is_not_empty() for value in possible_contacts)
+
     @classmethod
     def empty(cls):
         interval_left  = LeftEndpoint(0, True, False)
@@ -267,18 +275,16 @@ class IntervalExpression:
         head, *tail = sorted(intervals)
         acc = [head]
         for snd in tail:
-            init, fst = acc[:-1], acc[-1]
+            acc, fst = acc[:-1], acc[-1]
 
-            # no reduction condition
-            if Interval(fst.left, snd.right).is_empty() or Interval(snd.left, fst.right).is_empty():
-                last = [fst, snd]
-
-            else:
+            # reduction condition
+            if fst.touches(snd) or fst.intersects(snd):
                 left  = min(fst.left,  snd.left)
                 right = max(fst.right, snd.right)
-                last = [Interval(left, right)]
+                acc += [Interval(left, right)]
 
-            acc = init + last
+            else:
+                acc += [fst, snd]
 
         return IntervalExpression(acc)
 
@@ -287,50 +293,22 @@ class IntervalExpression:
             return IntervalExpression.domain()
 
         acc = []
-        for value in self.intervals:
+        stack = None
+        for value in self.union().intervals:
             if value.left.is_bounded():
-                not_left  = LeftEndpoint(None, True, True)
-                not_right = RightEndpoint(value.left.value, value.left.is_closed, value.left.is_open)
-                acc += [Interval(not_left, not_right)]
-
+                if stack is not None:
+                    left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
+                else:
+                    left = LeftEndpoint(None, True, True)
+                right = RightEndpoint(value.left.value, value.left.is_closed, value.left.is_open)
+                acc += [Interval(left, right)]
+                stack = None
             if value.right.is_bounded():
-                not_left  = LeftEndpoint(value.right.value, value.right.is_closed, value.right.is_open)
-                not_right = RightEndpoint(None, True, True)
-                acc += [Interval(not_left, not_right)]
-
-        number_of_intervals = len(acc)
-        if number_of_intervals == 0:
-            return IntervalExpression.empty()
-        elif number_of_intervals == 1:
-            return IntervalExpression(acc)
-
-        sorted_acc = sorted(acc)
-        acc, sorted_acc = [sorted_acc[0]], sorted_acc[1:]
-        #print('-------------------------')
-        while len(sorted_acc) > 0:
-            #print(str(acc) + '---------' + str(sorted_acc))
-            fst, acc = acc[-1], acc[:-1]
-            snd, sorted_acc = sorted_acc[0], sorted_acc[1:]
-            
-            #print(str(fst) + ':' + str(snd))
-            left  = max(fst.left,  snd.left)
-            right = min(fst.right, snd.right)
-            value = Interval(left, right)
-            #print('union: ' + str(value))
-            if value.is_not_empty():
-                acc += [value]
-                if snd.right > value.right and snd.right.is_bounded() and len(sorted_acc) > 0:
-                    for index in range(len(sorted_acc)):
-                        #print('-------------' + str(sorted_acc[index]) + ' is ' + str(sorted_acc[index].left.is_bounded()))
-                        if sorted_acc[index].left.is_bounded():
-                            sorted_acc = sorted_acc[:index + 1] + [snd] + sorted_acc[index + 1:]
-                            break
-            elif value.is_half_open() and value.left.value == value.right.value:
-                value = Interval(fst.left, snd.right)
-                acc += [value]
-            else:
-                acc += [fst, snd]
-           #print(str(acc))
+                stack = value.right
+        if stack is not None:
+            left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
+            right = RightEndpoint(None, True, True)
+            acc += [Interval(left, right)]
 
         return IntervalExpression(acc)
 

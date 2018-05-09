@@ -3,12 +3,14 @@ import asyncio
 import atexit
 import csv
 import functools
+import graphs
 import intervals
 import math
 import os
 import queue
 import random
 import socket
+import sys
 import time
 import threading
 import typing
@@ -24,7 +26,13 @@ class InterfaceHandler(threading.Thread):
     def __init__(self, client_socket):
         super().__init__()
         self.client_socket = client_socket
-        InterfaceHandler.is_waiting = False
+        InterfaceHandler.play_flag = threading.Event()
+        InterfaceHandler.stop_flag = threading.Event()
+
+    def wait():
+        InterfaceHandler.play_flag.wait()
+        if InterfaceHandler.stop_flag.wait(0):
+            sys.exit()
 
     def run(self):
         while True:
@@ -36,46 +44,43 @@ class InterfaceHandler(threading.Thread):
                 code = message.decode('utf8')
                 if code == "quit":
                     os._exit(1)
-                elif code == "pause":
-                    InterfaceHandler.is_waiting = True
-                elif code == "play":
-                    InterfaceHandler.is_waiting = False
+                elif code == "next":
+                    InterfaceHandler.play_flag.set()
+                    InterfaceHandler.play_flag.clear()
+                #elif code == "pause":
+                #    InterfaceHandler.is_waiting = True
+                #elif code == "play":
+                #    InterfaceHandler.is_waiting = False
                 elif code == "stop":
-                    InterfaceHandler.reset_condition_is_not_satisfied = False
-                    InterfaceHandler.is_waiting = True
-                elif code == "repeat_all":
-                    InterfaceHandler.reset_condition_is_not_satisfied = False
-                    InterfaceHandler.is_waiting = False
+                    InterfaceHandler.stop_flag.set()
+                    InterfaceHandler.play_flag.set()
+                    InterfaceHandler.play_flag.clear()
+                #elif code == "repeat_all":
+                #    InterfaceHandler.reset_condition_is_not_satisfied = False
+                #    InterfaceHandler.is_waiting = False
 
 class Simulation:
     log_prefix = './log/'
     log_suffix = '.csv'
     frame_per_second = 1
 
-    def wait(frames):
-        while InterfaceHandler.is_waiting:
-            time.sleep(1 / Simulation.frame_per_second)
-        time.sleep(frames / Simulation.frame_per_second)
-
     def restart():
         with Simulation.lock:
             Simulation.client_socket.send('reset'.encode('utf8'))
             Simulation.stack = []
-
             Simulation.dictionary = {}
 
             Simulation.log_file_name = Simulation.log_prefix + str(time.strftime('%Y_%m_%d_%H_%M_%S')) + Simulation.log_suffix
             if not os.path.exists(Simulation.log_prefix):
                 os.makedirs(Simulation.log_prefix)
 
-            Simulation.wait(1)
+            time.sleep(1)
 
             Simulation.agents = []
             Simulation.probes = []
 
             Simulation.win_condition_is_not_satisfied = True
             Simulation.lose_condition_is_not_satisfied = True
-            InterfaceHandler.reset_condition_is_not_satisfied = True
 
             if Simulation.log_file is not None:
                 Simulation.log_file.close()
@@ -99,13 +104,8 @@ class Simulation:
 
 
     def put(csv_content):
-        csv_content = list(map(lambda value:  str(value), csv_content))
-
+        csv_content = list(map(lambda value: str(value), csv_content))
         csv_content.insert(0, time.strftime('%Y_%m_%d_%H_%M_%S'))
-        if csv_content[1] == 'batch':
-            index = csv_content[1] + '_' + csv_content[2]
-        else:
-            index = csv_content[1]
 
         stream = csv.StringIO()
         writer = csv.writer(stream)
@@ -138,11 +138,9 @@ class MovementHandler(threading.Thread):
         self.state = state
 
     def run(self):
-        while Simulation.win_condition_is_not_satisfied \
-          and Simulation.lose_condition_is_not_satisfied \
-          and InterfaceHandler.reset_condition_is_not_satisfied:
+        while True:
+            InterfaceHandler.wait()
             self.state.movement()
-            Simulation.wait(1)
 
 class Movable:
     def __init__(self, type_id, id, location, movement):
@@ -378,18 +376,22 @@ class Process:
 
     def synchronous_read(self):
         # Calculate measurements
-        distance = math.sqrt(sum((value[0] - value[1])**2 for value in zip(self.location, Submarine.location)))
-        reply = str(distance <= self.precision)
+        submarine_location, submarine_timestamp = Submarine.get_values()
+        Submarine.read_flag.set()
+        distance = math.sqrt(sum((value[0] - value[1])**2 for value in zip(self.location, submarine_location)))
+        reply = str(distance < self.precision)
 
         return reply
 
 class Measurement:
-    def __init__(self, value: list, is_lying: bool):
+    def __init__(self, id, location, precision, cost, has_detected_submarine, value: list, is_lying: bool):
+        self.id: int = id
+        self.location = location
+        self.precision = precision
+        self.cost = cost
+        self.has_detected_submarine = has_detected_submarine
         self.value: list = value
         self.is_lying: bool = is_lying
-
-    def __repr__(self):
-        return str(self.value) + ('_LYING' if self.is_lying else '')  
 
     def addition(self, uncertainty):
         self.value = list(map(lambda value: value.addition(uncertainty).intersection(Simulation.domain()), self.value))
@@ -399,26 +401,17 @@ class Measurement:
         return all(value != intervals.IntervalExpression.empty() and value != Simulation.domain() for value in self.value)
 
 class Batch:
-    def __init__(self, timestamp: int):
+    def __init__(self, id: int, timestamp: int):
+        self.id: int = id
         self.timestamp: int = timestamp
         self.measurements: list = []
         self.type_id = 'batch'
-
-        # Create log
-        csv_content  = [self.type_id]
-        csv_content += [self.timestamp]
-        csv_content += self.measurements
-        Simulation.put(csv_content)
-
-    def __repr__(self):
-        csv_content  = self.type_id + ","
-        csv_content += str(self.timestamp) + ","
-        csv_content += str(self.measurements)
-        return csv_content
+        self.decay = 0
 
     def update(self, uncertainty):
         self.measurements = list(map(lambda value: value.addition(uncertainty), self.measurements))
         self.measurements = list(filter(lambda value: value.is_valid(), self.measurements))
+        self.decay += uncertainty.absolute
 
 ###############################################################################
 # Alert
@@ -443,7 +436,8 @@ class RedAlert(Alert):
         super().__init__([interval_expression], 10, 'RED ALERT!!!')
 
     def trigger(self):
-        Simulation.win_condition_is_not_satisfied = False
+        Simulation.client_socket.send('win'.encode('utf8'))
+        InterfaceHandler.wait()
 
 class YellowAlert(Alert):
     def __init__(self):
@@ -453,38 +447,35 @@ class YellowAlert(Alert):
         super().__init__([interval_expression], 5, 'Yellow alert!')
 
 
-
+class ShipState():
+    def __init__(self, location, timestamp, total_cost, batches):
+        self.location = location
+        self.timestamp = timestamp
+        self.total_cost = total_cost
+        self.batches = batches
 
 class AlarmOutput:
-    def __init__(self, alert: Alert, result: list):
+    def __init__(self, alert: Alert, state: ShipState):
         self.alert: Alert = alert
-        self.result: list = result
+        self.state: ShipState = state
 
 class HelicopterOutput:
-    def __init__(self, processes: list, timestamp: int):
+    def __init__(self, processes: list, state: ShipState):
         self.processes: list = processes
-        self.timestamp: int = timestamp
+        self.state: ShipState = state
 
 class ClockOutput:
-    def __init__(self, result: list, timestamp: int, frame: int, decay: int):
-        self.result: list = result
-        self.timestamp: int = timestamp
-        self.frame: int = frame
+    def __init__(self, decay: int, state: ShipState):
         self.decay: int = decay
-
-class Memory:
-    def __init__(self, total_cost: int):
-        self.total_cost: int = total_cost
+        self.state: ShipState = state
 
 class HelicopterInput:
-    def __init__(self, batch: Batch, cost: int):
-        self.batch: Batch = batch
-        self.cost: int = cost
+    def __init__(self, state: ShipState):
+        self.state: ShipState = state
 
 class ClockInput:
-    def __init__(self, decayed_result: list, incremented_timestamp: int):
-        self.decayed_result: list = decayed_result
-        self.incremented_timestamp: int = incremented_timestamp
+    def __init__(self, state: ShipState):
+        self.state: ShipState = state
 
 class Solution:
     def __init__(self, output: list):
@@ -515,73 +506,102 @@ class Formula:
 # - sends probes and attacks if detects enemy submarines
 # OR
 # - hacks probes and moves towards enemy submarines
-
 class Ship(Movable, Decidable):
     def no_movement(self):
         pass
 
-    def wait(self, timestamp, result, frame, decay):
-        Simulation.wait(frame)
-        timestamp += frame
-        result = list(map(lambda value: value.addition(intervals.AbsoluteUncertainty(0, decay)).intersection(Simulation.domain()), result))
+    def wait(self, clock_output: ClockOutput) -> ClockInput:
+        decay = clock_output.decay
+        state = clock_output.state
 
         # Create log
-        for batch in self.batches:
-            batch.update(intervals.AbsoluteUncertainty(0, decay))
-            csv_content  = [batch.type_id]
-            csv_content += [batch.timestamp]
-            csv_content += batch.measurements
-            Simulation.put(csv_content)
+        # Ship
+        result = [Simulation.domain()] * len(state.location)
+        for batch in state.batches:
+            for measurement in batch.measurements:
+                function = lambda value: value[0].intersection(value[1])
+                parameters = zip(result, measurement.value)
+                result = list(map(function, parameters))
+        csv_content = [state.location]
+        csv_content += [state.timestamp]
+        csv_content += [state.total_cost]
+        csv_content += [result]
 
-        input = ClockInput(result, timestamp)
+        # Submarine
+        submarine_location, submarine_timestamp = Submarine.get_values()
+        csv_content += [submarine_location]
+        csv_content += [submarine_timestamp]
+
+        # Probes
+        for batch in state.batches:
+            for measurement in batch.measurements:
+                csv_content += [measurement.id]
+                csv_content += [batch.id]
+                csv_content += [batch.timestamp]
+                csv_content += [measurement.location]
+                csv_content += [measurement.precision]
+                csv_content += [batch.decay]
+                csv_content += [measurement.cost]
+                csv_content += [measurement.has_detected_submarine]
+                csv_content += [measurement.value]
+        Simulation.put(csv_content)
+        InterfaceHandler.wait()
+        state.timestamp += 1
+
+        # Create log
+        empty_batches = []
+        for batch in state.batches:
+            batch.update(intervals.AbsoluteUncertainty(0, decay))
+            if len(batch.measurements) == 0:
+                empty_batches += [batch]
+        for batch in empty_batches:
+            state.batches.remove(batch)
+
+        input = ClockInput(state)
         return input
 
-    def try_alert(self, alert, value):
-        if all(zip_value[0].contains(zip_value[1]) for zip_value in zip(alert.range, value)):
-            cost = alert.cost
+    def try_alert(self, alarm_output: AlarmOutput):
+        alert = alarm_output.alert
+        state = alarm_output.state
 
-            # Create log
-            self.total_cost += cost
-            csv_content = [self.type_id]
-            csv_content += [self.location]
-            csv_content += [self.total_cost]
-            csv_content += [self.result]
-            csv_content += self.alerts
-            csv_content += [alert.message]
-            Simulation.put(csv_content)
+        result = [Simulation.domain()] * len(state.location)
+        for batch in state.batches:
+            for measurement in batch.measurements:
+                function = lambda value: value[0].intersection(value[1])
+                parameters = zip(result, measurement.value)
+                result = list(map(function, parameters))
+
+        if all(zip_value[0].contains(zip_value[1]) for zip_value in zip(alert.range, result)):
+            state.total_cost = alert.cost
 
             alert.trigger()
 
-    def get_fresh_measurements(self, processes, timestamp):
+    def get_fresh_measurements(self, helicopter_output: HelicopterOutput) -> HelicopterInput:
+        processes = helicopter_output.processes
+        state = helicopter_output.state
+
         # Heuristic Ephemeral Interval Byzantine Register
-        batch = Batch(timestamp)
+        batch_id = len(state.batches) + 1
+        batch_timestamp = state.timestamp
+        batch = Batch(batch_id, batch_timestamp)
+
         cost = 0
         for probe in processes:
             cost += probe.cost
 
             reply = probe.synchronous_read()
             if reply == 'True':
-                measurement = Measurement(probe.interval, False)
+                measurement = Measurement(self.probe_counter, probe.location, probe.precision, probe.cost, reply, probe.interval, False)
             else:
-                measurement = Measurement(list(map(lambda value: value.negation().intersection(Simulation.domain()), probe.interval)), False)
+                measurement = Measurement(self.probe_counter, probe.location, probe.precision, probe.cost, reply, list(map(lambda value: value.negation().intersection(Simulation.domain()), probe.interval)), False)
+
             batch.measurements += [measurement]
+            self.probe_counter += 1
 
-        self.batches += [batch]
-        csv_content  = [batch.type_id]
-        csv_content += [batch.timestamp]
-        csv_content += batch.measurements
-        Simulation.put(csv_content)
+        state.batches += [batch]
+        state.total_cost += cost
 
-        # Create log
-        self.total_cost += cost
-        csv_content = [self.type_id]
-        csv_content += [self.location]
-        csv_content += [self.total_cost]
-        csv_content += [self.result]
-        csv_content += self.alerts
-        Simulation.put(csv_content)
-
-        input = HelicopterInput(batch, cost)
+        input = HelicopterInput(state)
         return input
 
     #def awareness(self, message):
@@ -594,72 +614,24 @@ class Ship(Movable, Decidable):
             for n in range(1, random.randint(3, 4)):
                 processes += [Process(10, 3, [random.randint(0 + 3, 100 - 3)])]
 
-            output = [AlarmOutput(parameters[0], parameters[1])]
-            output += [HelicopterOutput(processes, parameters[2])]
-            output += [ClockOutput(parameters[1], parameters[2], parameters[3], parameters[4])]
-            output += [Memory(parameters[5])]
+            output = [AlarmOutput(parameters[1], parameters[0])]
+            output += [ClockOutput(parameters[2], parameters[0])]
+            output += [HelicopterOutput(processes, parameters[0])]
 
             solution = Solution(output)
 
             return solution
 
         def formulate(problem: Problem) -> Formula:
-            batch = None
             for input in problem.input:
                 if type(input) == HelicopterInput:
-                    batch = input.batch
-                    cost = input.cost
+                    state = input.state
                 elif type(input) == ClockInput:
-                    result = input.decayed_result
-                    timestamp = input.incremented_timestamp
-                elif type(input) == Memory:
-                    total_cost = input.total_cost
+                    state = input.state
 
-            if batch is not None:
-                total_cost += cost
-
-                #if len(batch.measurements) > 0:
-                #    print(batch.measurements)
-                for measurement in batch.measurements:
-                    function = lambda value: value[0].intersection(value[1])
-                    parameters = zip(result, measurement.value)
-                    intersection = list(map(function, parameters))
-
-                    #print(str(result) + " and " + str(measurement.value) + " <=> " + str(intersection))
-                    #if all(value == intervals.IntervalExpression.empty() for value in result) \
-                    #or all(value == intervals.IntervalExpression.empty() for value in measurement.value) \
-                    #or all(value == intervals.IntervalExpression.empty() for value in intersection):
-                    #    InterfaceHandler.is_waiting = True
-                    #    time.sleep(10000)
-
-                    result = intersection
-
-                #if len(batch.measurements) > 0:
-                #    print("")
-                #    print("")
-                #    print("")
-                #    print("")
-                #    print("")
-
-            # Create log
-            self.result = result
-            csv_content = [self.type_id]
-            csv_content += [self.location]
-            csv_content += [self.total_cost]
-            csv_content += [self.result]
-            csv_content += self.alerts
-            Simulation.put(csv_content)
-
-            with Submarine.lock:
-                max_speed = Submarine.speed
-                Submarine.speed = 0
-
-            parameters = [RedAlert()]
-            parameters += [result]
-            parameters += [timestamp]
+            parameters = [state]
+            parameters += [RedAlert()]
             parameters += [1]
-            parameters += [max_speed]
-            parameters += [total_cost]
 
             formula = Formula(search, parameters)
             return formula
@@ -671,46 +643,37 @@ class Ship(Movable, Decidable):
             input = []
             for output in solution.output:
                 if type(output) == AlarmOutput:
-                    self.try_alert(output.alert, output.result)
+                    self.try_alert(output)
                 elif type(output) == HelicopterOutput:
-                    input += [self.get_fresh_measurements(output.processes, output.timestamp)]
+                    if len(input) > 0 and (type(input[-1]) == ClockInput or type(input[-1]) == HelicopterOutput):
+                        output.state = input[-1].state
+                        input[-1] = self.get_fresh_measurements(output)
+                    else:
+                        input += [self.get_fresh_measurements(output)]
                 elif type(output) == ClockOutput:
-                    input += [self.wait(output.timestamp, output.result, output.frame, output.decay)]
-                elif type(output) == Memory:
-                    input += [output]
+                    if len(input) > 0 and (type(input[-1]) == ClockInput or type(input[-1]) == HelicopterOutput):
+                        output.state = input[-1].state
+                        input[-1] = [self.wait(output)]
+                    else:
+                        input += [self.wait(output)]
             problem = Problem(input)
 
             return problem
 
         # Problem Solving Search Algorithm
-        input = [ClockInput([Simulation.domain()] * len(self.location), 0)]
-        input += [Memory(0)]
+        input = [ClockInput(ShipState(self.location, 0, 0, []))]
         problem = Problem(input)
-        while Simulation.win_condition_is_not_satisfied \
-          and Simulation.lose_condition_is_not_satisfied \
-          and InterfaceHandler.reset_condition_is_not_satisfied:
+        while True:
             formula = formulate(problem)
             solution = apply(formula)
             problem = execute(solution)
 
     def __init__(self, location):
-        self.total_cost = 0
-        self.result = [Simulation.domain()] * len(location)
-        self.alerts = []
-        self.probes = []
-        self.batches = []
+        self.probe_counter = 1
 
         Movable.__init__(self, 'ship', 'ship', location, self.no_movement)
         #awareable.__init__(self, self.awareness)
         Decidable.__init__(self, self.strategy)
-
-        # Create log
-        csv_content = [self.type_id]
-        csv_content += [self.location]
-        csv_content += [self.total_cost]
-        csv_content += [self.result]
-        csv_content += self.alerts
-        Simulation.put(csv_content)
 
     def __hash__(self):
         return Movable.__hash__(self)
@@ -719,28 +682,28 @@ class Ship(Movable, Decidable):
         return super().__hash__()
 
 class Submarine(Movable, Decidable):
-    location = None
-    lock = threading.Lock()
+    #lock = threading.Lock()
+    def get_values():
+        Submarine.read_flag.wait()
+        Submarine.read_flag.clear()
+        return Submarine.location, Submarine.timestamp
 
     def move_to_submarine(self):
         velocity = list(map(lambda value: -value, Submarine.location))
         norm = math.sqrt(sum(value**2 for value in velocity))
         if norm == 0:
-            Simulation.lose_condition_is_not_satisfied = False
-            return
-        normalized_vector = list(map(lambda value: value / norm, velocity))
-        Submarine.location = list(map(lambda value: value[0] + value[1], zip(Submarine.location, normalized_vector)))
+            Simulation.client_socket.send('lose'.encode('utf8'))
+            InterfaceHandler.wait()
 
-        with Submarine.lock:
-            Submarine.speed += 1
+        normalized_vector = list(map(lambda value: value / norm, velocity))
+
+        Submarine.location = list(map(lambda value: value[0] + value[1], zip(Submarine.location, normalized_vector)))
+        Submarine.timestamp += 1
+        Submarine.read_flag.set()
+
         #request = str(self.location).encode('ascii')
         #for client in Simulation.probes:
         #    client.client_socket.send(request)
-
-        # Create log
-        csv_content = [self.type_id]
-        csv_content += [Submarine.location]
-        Simulation.put(csv_content)
 
     #def awareness(self, message):
     #    pass
@@ -749,36 +712,35 @@ class Submarine(Movable, Decidable):
         pass
 
         #random_probe_socket = random.choice(list(Simulation.probes)).client_socket
-        
+
         #random_probe_socket.send(self.type_id.encode('ascii'))
 
     def __init__(self, location):
+        Submarine.read_flag = threading.Event()
+
         Submarine.location = location
-        Submarine.speed = 0
+        Submarine.timestamp = 0
+        Submarine.read_flag.set()
+        #Submarine.speed = 0
 
         Movable.__init__(self, 'submarine', 'submarine', location, self.move_to_submarine)
         #awareable.__init__(self, self.awareness)
         Decidable.__init__(self, self.hack_random_probe)
-
-        # Create log
-        csv_content = [self.type_id]
-        csv_content += [Submarine.location]
-        Simulation.put(csv_content)
 
     def __hash__(self):
         return super().__hash__()
 
 #intervals.test()
 Simulation.start()
-while(True):
+while True:
+    InterfaceHandler.play_flag.wait()
     Simulation.agents.append(Ship([0]))
     Simulation.agents.append(Submarine([random.randint(0, 100)]))
 
+    InterfaceHandler.stop_flag.clear()
     for machine in Simulation.agents:
         machine.deploy()
 
-    while Simulation.win_condition_is_not_satisfied \
-      and Simulation.lose_condition_is_not_satisfied \
-      and InterfaceHandler.reset_condition_is_not_satisfied:
-        Simulation.wait(1)
+    Simulation.client_socket.send('enable_stop'.encode('utf8'))
+    InterfaceHandler.stop_flag.wait()
     Simulation.restart()

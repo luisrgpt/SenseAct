@@ -23,6 +23,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="application_1_submarines_and_probes.pyw" />
+    <Compile Include="graphs.pyw">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="intervals.pyw">
       <SubType>Code</SubType>
     </Compile>

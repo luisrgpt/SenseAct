@@ -7,9 +7,11 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Windows.ApplicationModel;
+using Windows.System;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Input;
 
 // The Blank Page item template is documented at
 // https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
@@ -31,6 +33,8 @@ private ShipItemViewModel ship
 private SubmarineItemViewModel submarine
     = new SubmarineItemViewModel();
 private BatchesItemViewModel batches
+    = new BatchesItemViewModel();
+private BatchesItemViewModel hidden_batches
     = new BatchesItemViewModel();
 
 public MainPage()
@@ -56,7 +60,7 @@ private async void OnThreadStartAsync() {
     var server = Dns.GetHostName();
     var port = 3000;
 
-    var size = 10000;
+    var size = 100000;
     var data = new byte[size];
 
     var encoding = Encoding.UTF8;
@@ -111,221 +115,236 @@ private async void OnThreadStartAsync() {
 
 private void UpdatePage(string[] csv)
 {
-    if (csv[0] == "reset")
-        ResetPage();
-    else if (csv[1] == "ship")
-        UpdateShip(csv);
-    else if (csv[1] == "submarine")
-        UpdateSubmarine(csv);
-    else if (csv[1] == "batch")
-        UpdateBatches(csv);
-}
-
-private void UpdateBatches(string[] csv)
-{
-    bool predicate(BatchesViewItem item)
-        => item.BatchViewItems[0].Attribute == csv[2];
-    var batch = batches.BatchesViewItems.FirstOrDefault(
-        predicate: predicate
-    );
-    if (csv.Length == 3)
-    {
-        batches.BatchesViewItems.Remove(batch);
+    if (csv[0] == "enable_stop") {
+        StopDelegate = ApplyStop;
+        Stop.IsEnabled = true;
         return;
     }
 
-    var index = 0;
-    if (batch == null)
-    {
-        batch = new BatchesViewItem();
-        batches.BatchesViewItems.Add(batch);
-        for (; index < csv.Length - 2; index++)
-        {
-            var item = new BatchViewItem();
-            batch.BatchViewItems.Add(item);
-        }
-    }
-
-    index = 0;
-    for (; index < csv.Length - 2; index++)
-    {
-        batch.BatchViewItems[index].Attribute
-            = csv[index + 2];
-
-        batch.BatchViewItems[index]
-            = batch.BatchViewItems[index];
-    }
-    for (; index < batch.BatchViewItems.Count(); index++)
-    {
-        batch.BatchViewItems.RemoveAt(csv.Length - 2);
-    }
-}
-
-private void UpdateSubmarine(string[] csv)
-{
-    if (submarine.SubmarineViewItems.Count == 1)
-    {
-        submarine.SubmarineViewItems[0].Attribute = csv[2];
-
-        submarine.SubmarineViewItems[0]
-            = submarine.SubmarineViewItems[0];
-    }
-    else
-    {
-        var location = new SubmarineViewItem()
-        {
-            Attribute = csv[2]
-        };
-
-        submarine.SubmarineViewItems.Add(location);
-    }
-}
-
-private void UpdateShip(string[] csv)
-{
-    if (ship.ShipViewItems.Count == 3)
-    {
-        ship.ShipViewItems[0].Attribute = csv[2];
-        ship.ShipViewItems[1].Attribute = csv[4];
-        ship.ShipViewItems[2].Attribute = csv[3];
-
-        ship.ShipViewItems[0] = ship.ShipViewItems[0];
-        ship.ShipViewItems[1] = ship.ShipViewItems[1];
-        ship.ShipViewItems[2] = ship.ShipViewItems[2];
-    }
-    else
-    {
-        var location = new ShipViewItem()
-        {
-            Attribute = csv[2]
-        };
-        var result = new ShipViewItem()
-        {
-            Attribute = csv[4]
-        };
-        var cost = new ShipViewItem()
-        {
-            Attribute = csv[3]
-        };
-
-        ship.ShipViewItems.Add(location);
-        ship.ShipViewItems.Add(result);
-        ship.ShipViewItems.Add(cost);
-    }
-}
-
-private void ResetPage()
-{
     ship.ShipViewItems.Clear();
     submarine.SubmarineViewItems.Clear();
     batches.BatchesViewItems.Clear();
+    if (csv[0] == "reset") {
+        NextDelegate = ApplyNext;
+        Next.IsEnabled = true;
+        return;
+    }
+    var vals = csv.Skip(1);
+
+    foreach (var val in vals.Take(4))
+    {
+        var item = new ShipViewItem()
+        {
+            Attribute = val
+        };
+
+        ship.ShipViewItems.Add(item);
+    }
+    vals = vals.Skip(4);
+
+    foreach (var val in vals.Take(2))
+    {
+        var item = new SubmarineViewItem()
+        {
+            Attribute = val
+        };
+
+        submarine.SubmarineViewItems.Add(item);
+    }
+    vals = vals.Skip(2);
+
+    while (vals.Count() > 0)
+    {
+        var probe = new BatchesViewItem();
+        batches.BatchesViewItems.Add(probe);
+
+        foreach (var val in vals.Take(9))
+        {
+            var item = new BatchViewItem
+            {
+                Attribute = "      " + val + " "
+            };
+            probe.BatchViewItems.Add(item);
+        }
+
+        vals = vals.Skip(9);
+    }
+
+    //PreviousDelegate = ApplyPrevious;
+    NextDelegate = ApplyNext;
+    //PauseDelegate = ApplyPause;
+    StopDelegate = ApplyStop;
+    //RepeatAllDelegate = ApplyRepeatAll;
+
+    //Previous.IsEnabled = true;
+    Next.IsEnabled = true;
+    //Pause.IsEnabled = true;
+    Stop.IsEnabled = true;
+    //RepeatAll.IsEnabled = true;
 }
 
-private void OnPreviousClick(
-    object sender,
-    RoutedEventArgs e)
+private void ApplyPrevious()
 {
 
 }
 
-private void OnNextClick(
-    object sender,
-    RoutedEventArgs e)
+private void ApplyNext()
 {
-
-}
-
-private void OnPauseClick(
-    object sender,
-    RoutedEventArgs e)
-{
-    var button = sender as Button;
-    button.IsEnabled = false;
-    button.Click -= OnPauseClick;
-
+    Previous.IsEnabled = false;
+    Next.IsEnabled = false;
+    Pause.IsEnabled = false;
     Stop.IsEnabled = false;
     RepeatAll.IsEnabled = false;
+
+    PreviousDelegate = null;
+    NextDelegate = null;
+    PauseDelegate = null;
+    StopDelegate = null;
+    RepeatAllDelegate = null;
+
+    var data = Encoding.UTF8.GetBytes("next");
+    stream.Write(data, 0, data.Length);
+
+    var symbol_icon = Pause.Content as SymbolIcon;
+    symbol_icon.Symbol = Symbol.Play;
+}
+
+private void ApplyPause()
+{
+    Previous.IsEnabled = false;
+    Next.IsEnabled = false;
+    Pause.IsEnabled = false;
+    Stop.IsEnabled = false;
+    RepeatAll.IsEnabled = false;
+
+    PreviousDelegate = null;
+    NextDelegate = null;
+    PauseDelegate = null;
+    StopDelegate = null;
+    RepeatAllDelegate = null;
 
     var data = Encoding.UTF8.GetBytes("pause");
     stream.Write(data, 0, data.Length);
 
-    var symbol_icon = button.Content as SymbolIcon;
+    var symbol_icon = Pause.Content as SymbolIcon;
     symbol_icon.Symbol = Symbol.Play;
 
-    Stop.IsEnabled = true;
-    RepeatAll.IsEnabled = true;
+    //PreviousDelegate = ApplyPrevious;
+    NextDelegate = ApplyNext;
+    //PauseDelegate = ApplyPause;
+    StopDelegate = ApplyStop;
+    //RepeatAllDelegate = ApplyRepeatAll;
 
-    button.Click += OnPlayClick;
-    button.IsEnabled = true;
+    //Previous.IsEnabled = true;
+    Next.IsEnabled = true;
+    //Pause.IsEnabled = true;
+    Stop.IsEnabled = true;
+    //RepeatAll.IsEnabled = true;
 }
 
-private void OnPlayClick(
-    object sender,
-    RoutedEventArgs e)
+private void ApplyPlay()
 {
-    var button = sender as Button;
-    button.IsEnabled = false;
-    button.Click -= OnPlayClick;
-
+    Previous.IsEnabled = false;
+    Next.IsEnabled = false;
+    Pause.IsEnabled = false;
     Stop.IsEnabled = false;
     RepeatAll.IsEnabled = false;
+
+    PreviousDelegate = null;
+    NextDelegate = null;
+    PauseDelegate = null;
+    StopDelegate = null;
+    RepeatAllDelegate = null;
 
     var data = Encoding.UTF8.GetBytes("play");
     stream.Write(data, 0, data.Length);
 
-    var symbol_icon = button.Content as SymbolIcon;
+    var symbol_icon = Pause.Content as SymbolIcon;
     symbol_icon.Symbol = Symbol.Pause;
 
-    Stop.IsEnabled = true;
-    RepeatAll.IsEnabled = true;
+    //PreviousDelegate = ApplyPrevious;
+    NextDelegate = ApplyNext;
+    //PauseDelegate = ApplyPause;
+    StopDelegate = ApplyStop;
+    //RepeatAllDelegate = ApplyRepeatAll;
 
-    button.Click += OnPauseClick;
-    button.IsEnabled = true;
+    //Previous.IsEnabled = true;
+    Next.IsEnabled = true;
+    //Pause.IsEnabled = true;
+    Stop.IsEnabled = true;
+    //RepeatAll.IsEnabled = true;
 }
 
-private void OnStopClick(
-    object sender,
-    RoutedEventArgs e)
+private void ApplyStop()
 {
-    var button = sender as Button;
-    button.IsEnabled = false;
-
+    Previous.IsEnabled = false;
+    Next.IsEnabled = false;
     Pause.IsEnabled = false;
+    Stop.IsEnabled = false;
     RepeatAll.IsEnabled = false;
+
+    PreviousDelegate = null;
+    NextDelegate = null;
+    PauseDelegate = null;
+    StopDelegate = null;
+    RepeatAllDelegate = null;
 
     var data = Encoding.UTF8.GetBytes("stop");
     stream.Write(data, 0, data.Length);
-
-    ResetPage();
-
-    var pause_symbol_icon = Pause.Content as SymbolIcon;
-    if (pause_symbol_icon.Symbol == Symbol.Pause) {
-        Pause.Click -= OnPauseClick;
-        pause_symbol_icon.Symbol = Symbol.Play;
-        Pause.Click += OnPlayClick;
-    }
-
-    Pause.IsEnabled = true;
-    RepeatAll.IsEnabled = true;
 }
 
-private void OnRepeatAllClick(
-    object sender,
-    RoutedEventArgs e)
+private void ApplyRepeatAll()
 {
-    var button = sender as Button;
-    button.IsEnabled = false;
-
+    Previous.IsEnabled = false;
+    Next.IsEnabled = false;
     Pause.IsEnabled = false;
     Stop.IsEnabled = false;
+    RepeatAll.IsEnabled = false;
+
+    PreviousDelegate = null;
+    NextDelegate = null;
+    PauseDelegate = null;
+    StopDelegate = null;
+    RepeatAllDelegate = null;
 
     var data = Encoding.UTF8.GetBytes("repeat_all");
     stream.Write(data, 0, data.Length);
+}
 
-    Pause.IsEnabled = true;
-    Stop.IsEnabled = true;
+private Action PreviousDelegate;
+private Action NextDelegate;
+private Action PauseDelegate;
+private Action StopDelegate;
+private Action RepeatAllDelegate;
 
-    button.IsEnabled = true;
+private void OnPreviousClick(object sender, RoutedEventArgs e) => PreviousDelegate?.Invoke();
+private void OnNextClick(object sender, RoutedEventArgs e) => NextDelegate?.Invoke();
+private void OnPauseClick(object sender, RoutedEventArgs e) => PauseDelegate?.Invoke();
+private void OnStopClick(object sender, RoutedEventArgs e) => StopDelegate?.Invoke();
+private void OnRepeatAllClick(object sender, RoutedEventArgs e) => RepeatAllDelegate?.Invoke();
+
+private void OnKeyUp(
+    object sender,
+    KeyRoutedEventArgs e)
+{
+    switch (e.Key)
+    {
+        //case VirtualKey.Left:
+        //    PreviousDelegate?.Invoke();
+        //    break;
+        case VirtualKey.Right:
+            NextDelegate?.Invoke();
+            break;
+        //case VirtualKey.Space:
+        //    PauseDelegate?.Invoke();
+        //    break;
+        case VirtualKey.Escape:
+            StopDelegate?.Invoke();
+            break;
+        case VirtualKey.R:
+            StopDelegate?.Invoke();
+            break;
+    }
 }
 }
 }
