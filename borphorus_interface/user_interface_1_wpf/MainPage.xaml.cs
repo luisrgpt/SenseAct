@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -12,17 +11,18 @@ using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media.Imaging;
 
 // The Blank Page item template is documented at
 // https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
 namespace user_interface_1_wpf
 {
-/// <summary>
-/// An empty page that can be used on its own or navigated
-/// to within a Frame.
-/// </summary>
-public sealed partial class MainPage : Page
+    /// <summary>
+    /// An empty page that can be used on its own or navigated
+    /// to within a Frame.
+    /// </summary>
+    public sealed partial class MainPage : Page
 {
 private const string path_name = "./";
 
@@ -52,7 +52,11 @@ private void OnSuspending(
     //Debug.WriteLine("quit");
 
     var data = Encoding.UTF8.GetBytes("quit");
-    stream.Write(data, 0, data.Length);
+    try
+    {
+        stream.Write(data, 0, data.Length);
+    }
+    catch (Exception) {}
     socket_client.Close();
 }
 
@@ -108,9 +112,7 @@ private async void OnThreadStartAsync() {
             }
         }
     }
-    catch (Exception) {
-        Environment.Exit(0);
-    }
+    catch (Exception) {}
 }
 
 private void UpdatePage(string[] csv)
@@ -152,6 +154,12 @@ private void UpdatePage(string[] csv)
         submarine.SubmarineViewItems.Add(item);
     }
     vals = vals.Skip(2);
+
+    Graph.Source = new BitmapImage
+    {
+        UriSource = new Uri(vals.First())
+    };
+    vals = vals.Skip(1);
 
     while (vals.Count() > 0)
     {

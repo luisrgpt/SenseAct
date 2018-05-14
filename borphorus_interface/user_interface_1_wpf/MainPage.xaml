@@ -23,206 +23,193 @@
                 Value="Center"/>
         </Style>
     </Page.Resources>
-
-    <NavigationView
-        CompactModeThresholdWidth="1920"
-        ExpandedModeThresholdWidth="1920"
-        KeyDown="OnKeyUp">
-        <Frame>
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="auto"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="auto"/>
-                    <RowDefinition Height="auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="auto"/>
-                </Grid.RowDefinitions>
-                <Grid
-                    Background="#FF0078D7"
-                    Grid.Column="0"
-                    Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <ListView
-                        Grid.Column="0">
-                        <TextBlock
-                            Style="{StaticResource Text}"
-                            Text="Ship location:"/>
-                        <TextBlock
-                            Style="{StaticResource Text}"
-                            Text="Timestamp:"/>
-                        <TextBlock
-                            Style="{StaticResource Text}"
-                            Text="Total Cost:"/>
-                        <TextBlock
-                            Style="{StaticResource Text}"
-                            Text="Result:"/>
-                    </ListView>
-                    <ListView
-                        Grid.Column="1"
-                        ItemsSource="{x:Bind ship.ShipViewItems}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate
-                                x:DataType="local:ShipViewItem">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="auto"/>
+        </Grid.RowDefinitions>
+        <Pivot
+            Grid.Row="0"
+            KeyDown="OnKeyUp">
+            <PivotItem
+                Header="Measurements">
+                <Frame>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="auto"/>
+                            <RowDefinition Height="auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid
+                            Background="#FF0078D7"
+                            Grid.Column="0"
+                            Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ListView
+                                Grid.Column="0">
                                 <TextBlock
                                     Style="{StaticResource Text}"
-                                    Text="{x:Bind Attribute}"/>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </Grid>
-                <Grid
-                    Background="#FFE74856"
-                    Grid.Column="1"
-                    Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <ListView Grid.Column="0">
-                        <TextBlock
-                            Style="{StaticResource Text}"
-                            Text="Submarine location:"/>
-                        <TextBlock
-                            Style="{StaticResource Text}"
-                            Text="Timestamp:"/>
-                    </ListView>
-                    <ListView
-                        Grid.Column="1"
-                        ItemsSource="{x:Bind submarine.SubmarineViewItems}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate
-                                x:DataType="local:SubmarineViewItem">
+                                    Text="Ship location:"/>
                                 <TextBlock
                                     Style="{StaticResource Text}"
-                                    Text="{x:Bind Attribute}"/>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
-                </Grid>
-                <ListViewItem
-                    Background="#FF627588"
-                    Grid.Row="1"
-                    Grid.ColumnSpan="2">
-                    <ListView>
-                        <ListView.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <ItemsStackPanel
-                                    Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ListView.ItemsPanel>
-                        <ListView>
-                            <TextBlock
-                                Style="{StaticResource Text}"
-                                Text="Probe_ID      Batch_ID     Timestamp      Location    Precision      Decay          Cost        Submarine?        Result"/>
-                        </ListView>
-                    </ListView>
-                </ListViewItem>
-                <ScrollViewer
-                    Grid.Row="2"
-                    Grid.ColumnSpan="2">
-                    <ListView
-                        Background="#FF627588"
-                        ItemsSource="{x:Bind batches.BatchesViewItems}">
-                        <ListView.ItemTemplate>
-                            <DataTemplate
-                                x:DataType="local:BatchesViewItem">
-                                <ListView
-                                    ItemsSource="{x:Bind BatchViewItems}">
-                                    <ListView.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <ItemsStackPanel
-                                                Orientation="Horizontal"/>
-                                        </ItemsPanelTemplate>
-                                    </ListView.ItemsPanel>
+                                    Text="Timestamp:"/>
+                                <TextBlock
+                                    Style="{StaticResource Text}"
+                                    Text="Total Cost:"/>
+                                <TextBlock
+                                    Style="{StaticResource Text}"
+                                    Text="Result:"/>
+                            </ListView>
+                            <ListView
+                                Grid.Column="1"
+                                ItemsSource="{x:Bind ship.ShipViewItems}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate
+                                        x:DataType="local:ShipViewItem">
+                                        <TextBlock
+                                            Style="{StaticResource Text}"
+                                            Text="{x:Bind Attribute}"/>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                        <Grid
+                            Background="#FFE74856"
+                            Grid.Column="1"
+                            Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ListView Grid.Column="0">
+                                <TextBlock
+                                    Style="{StaticResource Text}"
+                                    Text="Submarine location:"/>
+                                <TextBlock
+                                    Style="{StaticResource Text}"
+                                    Text="Timestamp:"/>
+                            </ListView>
+                            <ListView
+                                Grid.Column="1"
+                                ItemsSource="{x:Bind submarine.SubmarineViewItems}">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate
+                                        x:DataType="local:SubmarineViewItem">
+                                        <TextBlock
+                                            Style="{StaticResource Text}"
+                                            Text="{x:Bind Attribute}"/>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                        <ListViewItem
+                            Background="#FF627588"
+                            Grid.Row="1"
+                            Grid.ColumnSpan="2">
+                            <ListView>
+                                <ListView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsStackPanel
+                                            Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ListView.ItemsPanel>
+                                <ListView>
+                                    <TextBlock
+                                        Style="{StaticResource Text}"
+                                        Text="Probe_ID      Batch_ID     Timestamp      Location    Precision      Decay          Cost        Submarine?        Result"/>
+                                </ListView>
+                            </ListView>
+                        </ListViewItem>
+                        <ScrollViewer
+                            Grid.Row="2"
+                            Grid.ColumnSpan="2">
+                            <ListView
+                                Background="#FF627588"
+                                ItemsSource="{x:Bind batches.BatchesViewItems}">
                                     <ListView.ItemTemplate>
                                         <DataTemplate
-                                            x:DataType="local:BatchViewItem">
-                                            <TextBlock
-                                                Style="{StaticResource Text}"
-                                                Text="{x:Bind Attribute}"/>
+                                        x:DataType="local:BatchesViewItem">
+                                            <ListView
+                                            ItemsSource="{x:Bind BatchViewItems}">
+                                                <ListView.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <ItemsStackPanel
+                                                        Orientation="Horizontal"/>
+                                                    </ItemsPanelTemplate>
+                                                </ListView.ItemsPanel>
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate
+                                                    x:DataType="local:BatchViewItem">
+                                                        <TextBlock
+                                                        Style="{StaticResource Text}"
+                                                        Text="{x:Bind Attribute}"/>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                        <!--<GridViewItem>
-                            <Grid
-                                Background="#FF627588"
-                                Width="auto"
-                                Height="auto">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="auto"/>
-                                    <ColumnDefinition Width="auto"/>
-                                </Grid.ColumnDefinitions>
-                                <ListView
-                                    Grid.Column="0">
-                                    <TextBlock
-                                        Style="{StaticResource Text}"
-                                        Text="Measurements:"/>
-                                </ListView>
-                                <ListView
-                                    Grid.Column="1">
-                                    <TextBlock
-                                        Style="{StaticResource Text}"
-                                        Text="[[100.0..100.0]] or [[100.0..100.0]]"/>
-                                </ListView>
-                            </Grid>
-                        </GridViewItem>-->
-                    </ListView>
-                </ScrollViewer>
-                <ListView
-                    Grid.Row="3"
-                    Grid.ColumnSpan="2">
-                    <ListView.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <ItemsStackPanel
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Center"/>
-                        </ItemsPanelTemplate>
-                    </ListView.ItemsPanel>
-                    <Button
-                        Click="OnPreviousClick"
-                        HorizontalAlignment="Center"
-                        IsEnabled="False"
-                        Name="Previous">
-                        <SymbolIcon Symbol="Previous"/>
-                    </Button>
-                    <Button
-                        Click="OnNextClick"
-                        HorizontalAlignment="Center"
-                        IsEnabled="False"
-                        Name="Next">
-                        <SymbolIcon Symbol="Next"/>
-                    </Button>
-                    <Button
-                        Click="OnPauseClick"
-                        HorizontalAlignment="Center"
-                        IsEnabled="False"
-                        Name="Pause">
-                        <SymbolIcon Symbol="Pause"/>
-                    </Button>
-                    <Button
-                        Click="OnStopClick"
-                        HorizontalAlignment="Center"
-                        IsEnabled="False"
-                        Name="Stop">
-                        <SymbolIcon Symbol="Stop"/>
-                    </Button>
-                    <Button
-                        Click="OnRepeatAllClick"
-                        HorizontalAlignment="Center"
-                        IsEnabled="False"
-                        Name="RepeatAll">
-                        <SymbolIcon Symbol="RepeatAll"/>
-                    </Button>
-                </ListView>
-            </Grid>
-        </Frame>
-    </NavigationView>
+                        </ScrollViewer>
+                    </Grid>
+                </Frame>
+            </PivotItem>
+            <PivotItem
+                Header="Strategy">
+                <Image
+                    Name="Graph"/>
+            </PivotItem>
+        </Pivot>
+        <ListView
+            Grid.Row="1">
+            <ListView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsStackPanel
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Center"/>
+                </ItemsPanelTemplate>
+            </ListView.ItemsPanel>
+            <Button
+                Click="OnPreviousClick"
+                HorizontalAlignment="Center"
+                IsEnabled="False"
+                Name="Previous">
+                <SymbolIcon Symbol="Previous"/>
+            </Button>
+            <Button
+                Click="OnNextClick"
+                HorizontalAlignment="Center"
+                IsEnabled="False"
+                Name="Next">
+                <SymbolIcon Symbol="Next"/>
+            </Button>
+            <Button
+                Click="OnPauseClick"
+                HorizontalAlignment="Center"
+                IsEnabled="False"
+                Name="Pause">
+                <SymbolIcon Symbol="Pause"/>
+            </Button>
+            <Button
+                Click="OnStopClick"
+                HorizontalAlignment="Center"
+                IsEnabled="False"
+                Name="Stop">
+                <SymbolIcon Symbol="Stop"/>
+            </Button>
+            <Button
+                Click="OnRepeatAllClick"
+                HorizontalAlignment="Center"
+                IsEnabled="False"
+                Name="RepeatAll">
+                <SymbolIcon Symbol="RepeatAll"/>
+            </Button>
+        </ListView>
+    </Grid>
 </Page>

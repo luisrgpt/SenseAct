@@ -330,7 +330,7 @@ class IntervalExpression:
         #print('(' + str(self) + ') and (' + str(other) + ')')
         #print('not ' + str(self) + ' = ' + str(not_self))
         #print('not ' + str(other) + ' = ' + str(not_other))
-        #print(str(not_self) + " u " + str(not_other) + ' = ' + str(not_result))
+        #print(str(not_self) + ' u ' + str(not_other) + ' = ' + str(not_result))
         #print('not ' + str(not_result) + ' = ' + str(result))
         #if result.intervals[-1].right.is_unbounded():
         #    print('')

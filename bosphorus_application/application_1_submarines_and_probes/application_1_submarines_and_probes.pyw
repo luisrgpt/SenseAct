@@ -42,20 +42,20 @@ class InterfaceHandler(threading.Thread):
                 os._exit(1)
             else:
                 code = message.decode('utf8')
-                if code == "quit":
+                if code == 'quit':
                     os._exit(1)
-                elif code == "next":
+                elif code == 'next':
                     InterfaceHandler.play_flag.set()
                     InterfaceHandler.play_flag.clear()
-                #elif code == "pause":
+                #elif code == 'pause':
                 #    InterfaceHandler.is_waiting = True
-                #elif code == "play":
+                #elif code == 'play':
                 #    InterfaceHandler.is_waiting = False
-                elif code == "stop":
+                elif code == 'stop':
                     InterfaceHandler.stop_flag.set()
                     InterfaceHandler.play_flag.set()
                     InterfaceHandler.play_flag.clear()
-                #elif code == "repeat_all":
+                #elif code == 'repeat_all':
                 #    InterfaceHandler.reset_condition_is_not_satisfied = False
                 #    InterfaceHandler.is_waiting = False
 
@@ -448,10 +448,11 @@ class YellowAlert(Alert):
 
 
 class ShipState():
-    def __init__(self, location, timestamp, total_cost, batches):
+    def __init__(self, location, timestamp, total_cost, graph, batches):
         self.location = location
         self.timestamp = timestamp
         self.total_cost = total_cost
+        self.graph = graph
         self.batches = batches
 
 class AlarmOutput:
@@ -532,6 +533,9 @@ class Ship(Movable, Decidable):
         csv_content += [submarine_location]
         csv_content += [submarine_timestamp]
 
+        # Graph
+        csv_content += [state.graph.save_into_disk_and_get_file_name('../../borphorus_interface/user_interface_1_wpf/bin/x64/Debug/AppX')]
+
         # Probes
         for batch in state.batches:
             for measurement in batch.measurements:
@@ -556,6 +560,24 @@ class Ship(Movable, Decidable):
                 empty_batches += [batch]
         for batch in empty_batches:
             state.batches.remove(batch)
+
+        # Generate result
+        result = [Simulation.domain()] * len(state.location)
+        for batch in state.batches:
+            for measurement in batch.measurements:
+                function = lambda value: value[0].intersection(value[1])
+                parameters = zip(result, measurement.value)
+                result = list(map(function, parameters))
+        function = lambda value: value.intervals
+        dimensions = list(map(function, result))
+        targets = list(zip(*dimensions))
+
+        # Update graph
+        state.graph += graphs.Hyperedge(
+            targets = targets,
+            weight = 0,
+            label = "t" + str(state.timestamp)
+        )
 
         input = ClockInput(state)
         return input
@@ -600,6 +622,24 @@ class Ship(Movable, Decidable):
 
         state.batches += [batch]
         state.total_cost += cost
+
+        # Generate result
+        result = [Simulation.domain()] * len(state.location)
+        for batch in state.batches:
+            for measurement in batch.measurements:
+                function = lambda value: value[0].intersection(value[1])
+                parameters = zip(result, measurement.value)
+                result = list(map(function, parameters))
+        function = lambda value: value.intervals
+        dimensions = list(map(function, result))
+        targets = list(zip(*dimensions))
+
+        # Update graph
+        state.graph += graphs.Hyperedge(
+            targets = targets,
+            weight = 0,
+            label = "b" + str(batch_id)
+        )
 
         input = HelicopterInput(state)
         return input
@@ -661,7 +701,18 @@ class Ship(Movable, Decidable):
             return problem
 
         # Problem Solving Search Algorithm
-        input = [ClockInput(ShipState(self.location, 0, 0, []))]
+        graph = graphs.Graph(
+            node = graphs.Node([Simulation.domain()] * len(self.location))
+        )
+
+        initial_state = ShipState(
+            location = self.location,
+            timestamp = 0,
+            total_cost = 0,
+            graph = graph,
+            batches = []
+        )
+        input = [ClockInput(initial_state)]
         problem = Problem(input)
         while True:
             formula = formulate(problem)
@@ -730,6 +781,7 @@ class Submarine(Movable, Decidable):
     def __hash__(self):
         return super().__hash__()
 
+#graphs.test()
 #intervals.test()
 Simulation.start()
 while True:
