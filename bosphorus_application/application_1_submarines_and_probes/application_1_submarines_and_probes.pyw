@@ -448,12 +448,13 @@ class YellowAlert(Alert):
 
 
 class ShipState():
-    def __init__(self, location, timestamp, total_cost, graph, batches):
+    def __init__(self, location, timestamp, total_cost, graph, batches, state):
         self.location = location
         self.timestamp = timestamp
         self.total_cost = total_cost
         self.graph = graph
         self.batches = batches
+        self.state = state
 
 class AlarmOutput:
     def __init__(self, alert: Alert, state: ShipState):
@@ -570,14 +571,31 @@ class Ship(Movable, Decidable):
                 result = list(map(function, parameters))
         function = lambda value: value.intervals
         dimensions = list(map(function, result))
-        targets = list(zip(*dimensions))
 
-        # Update graph
-        state.graph += graphs.Hyperedge(
-            targets = targets,
-            weight = 0,
-            label = "t" + str(state.timestamp)
-        )
+        function = lambda value: [value]
+        targets = list(map(function, dimensions[0]))
+        function = lambda value: value[0] + [value[1]] 
+        for dimension in dimensions[1:]:
+            targets = list(map(function, zip(targets, dimension)))
+
+        for target in targets:
+            sources = []
+            for source in state.state:
+                if all(value[0].contains(value[1]) for value in zip(target, source)):
+                    sources += [source]
+
+            print("sources " + str(sources))
+            print("target " + str([target]))
+
+            # Update graph
+            state.graph += graphs.Hyperedge(
+                sources = sources,
+                targets = [target],
+                weight = 0,
+                label = 't' + str(state.timestamp)
+            )
+
+        state.state = targets
 
         input = ClockInput(state)
         return input
@@ -632,14 +650,32 @@ class Ship(Movable, Decidable):
                 result = list(map(function, parameters))
         function = lambda value: value.intervals
         dimensions = list(map(function, result))
-        targets = list(zip(*dimensions))
 
-        # Update graph
-        state.graph += graphs.Hyperedge(
-            targets = targets,
-            weight = 0,
-            label = "b" + str(batch_id)
-        )
+        function = lambda value: [value]
+        targets = list(map(function, dimensions[0]))
+        function = lambda value: value[0] + [value[1]] 
+        for dimension in dimensions[1:]:
+            targets = list(map(function, zip(targets, dimension)))
+
+        print("sources " + str([state.state]))
+        for source in state.state:
+            sub_targets = []
+            for target in targets:
+                if all(value[0].contains(value[1]) for value in zip(source, target)):
+                    sub_targets += [target]
+
+            print("source " + str([source]))
+            print("targets " + str(targets))
+
+            # Update graph
+            state.graph += graphs.Hyperedge(
+                sources = [source],
+                targets = sub_targets,
+                weight = cost,
+                label = 'b' + str(batch.id)
+            )
+
+        state.state = targets
 
         input = HelicopterInput(state)
         return input
@@ -702,7 +738,7 @@ class Ship(Movable, Decidable):
 
         # Problem Solving Search Algorithm
         graph = graphs.Graph(
-            node = graphs.Node([Simulation.domain()] * len(self.location))
+            node = graphs.Node(Simulation.domain().intervals * len(self.location))
         )
 
         initial_state = ShipState(
@@ -710,7 +746,8 @@ class Ship(Movable, Decidable):
             timestamp = 0,
             total_cost = 0,
             graph = graph,
-            batches = []
+            batches = [],
+            state = [Simulation.domain().intervals * len(self.location)]
         )
         input = [ClockInput(initial_state)]
         problem = Problem(input)

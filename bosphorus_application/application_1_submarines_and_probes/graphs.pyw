@@ -24,26 +24,21 @@ class DisconnectedGraphException(Exception):
 #        self.weight: int = weight # Weighted
 #        self.label: str = label   # Vertex-transitive
 
-class Node:
-    def __init__(self, id):
-        self.id = id
-        self.edges: list = []
-
 class Hyperedge:
-    def __init__(self, targets: list, weight: int, label: str):
+    def __init__(self, sources: list, targets: list, weight: int, label: str):
+        self.sources: list = sources
         self.targets: list = targets # Directed
         self.weight: int = weight    # Weighted
         self.label: str = label      # Vertex-transitive
 
+class Node:
+    def __init__(self, id):
+        self.id = id
+        self.edges: dict = {}
+
 class Graph:
     def __init__(self, node: Node):
         self.nodes: dict = {str(node.id): node}
-        self.edges: dict = {}
-        self.hyperedge = Hyperedge(
-            targets = [node.id],
-            weight = 0,
-            label = ""
-        )
 
     def __iadd__(self, hyperedge: Hyperedge):
         # Connected Graph => ANY node in graph points to new node
@@ -65,14 +60,9 @@ class Graph:
             # Add target into graph
             self.nodes[str(target)] = Node(target)
 
-        # Add hyperedge into graph
-        self.edges[hyperedge.label] = hyperedge
-
-        for source in self.hyperedge.targets:
-            # Add hyperedge reference into source
-            self.nodes[str(source)].edges += [hyperedge.label]
-
-        self.hyperedge = hyperedge
+        for source in hyperedge.sources:
+            # Add hyperedge into source
+            self.nodes[str(source)].edges[hyperedge.label] = hyperedge
 
         return self
 
@@ -84,16 +74,13 @@ class Graph:
         )
         for node_id in self.nodes:
             dot.node(name=node_id)
-        for node in self.nodes.values():
-            for edge_id in node.edges:
-                for target_id in self.edges[edge_id].targets:
-                    print('tail_name ' + str(node.id))
-                    print('head_name ' + str(target_id))
-                    print('label ' + edge_id)
+        for source in self.nodes.values():
+            for edge in source.edges.values():
+                for target in edge.targets:
                     dot.edge(
-                        tail_name = str(node.id),
-                        head_name = str(target_id),
-                        label = edge_id
+                        tail_name = str(source.id),
+                        head_name = str(target),
+                        label = edge.label
                     )
         dot.render()
 

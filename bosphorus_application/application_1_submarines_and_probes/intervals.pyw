@@ -209,7 +209,7 @@ class Interval:
         return self.left < other.left
 
     def __gt__(self, other):
-        return other.right > self.right
+        return other.right < self.right
 
     def __eq__(self, other):
         return self.left == other.left and self.right == other.right or self.is_empty() and other.is_empty()
@@ -218,7 +218,7 @@ class Interval:
         return self.left <= other.left or self.__eq__(other)
 
     def __ge__(self, other):
-        return other.right >= self.right or self.__eq__(other)
+        return other.right <= self.right or self.__eq__(other)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -230,6 +230,9 @@ class Interval:
             return '{' + str(self.left.value) + '}'
         else:
             return str(self.left) + ('..') + str(self.right)
+
+    def contains(self, other):
+        return self <= other and self >= other
 
 class IntervalExpression:
     def __init__(self, intervals: list):
