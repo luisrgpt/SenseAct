@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import atexit
+import copy
 import csv
 import functools
 import graphs
@@ -150,8 +151,8 @@ class Movable:
         self.movement = movement
         MovementHandler(self).start()
 
-    def __hash__(self):
-        return hash(self.id)
+    #def __hash__(self):
+    #    return hash(self.id)
 
 ###############################################################################
 # Awareable
@@ -270,8 +271,8 @@ class Decidable:
     def deploy(self):
         StrategyHandler(self).start()
 
-    def __hash__(self):
-        return hash(self.id)
+    #def __hash__(self):
+    #    return hash(self.id)
 
 ###############################################################################
 # Probe
@@ -367,19 +368,18 @@ class Process:
         self.cost : int = cost
         self.precision : int = precision
         self.location = location
-        self.interval = []
-        for value in location:
-            interval_left  = intervals.LeftEndpoint(value - precision, False, True)
-            interval_right = intervals.RightEndpoint(value + precision, False, True)
-            interval_expression = intervals.IntervalExpression([intervals.Interval(interval_left, interval_right)])
-            self.interval += [interval_expression]
+        self.interval = intervals.IntervalExpression([intervals.Interval(
+            left = intervals.LeftEndpoint(location[0] - precision, False, True),
+            right = intervals.RightEndpoint(location[0] + precision, False, True)
+        )])
 
     def synchronous_read(self):
         # Calculate measurements
-        submarine_location, submarine_timestamp = Submarine.get_values()
+        submarine_location, _ = Submarine.get_values()
         Submarine.read_flag.set()
-        distance = math.sqrt(sum((value[0] - value[1])**2 for value in zip(self.location, submarine_location)))
-        reply = str(distance < self.precision)
+        values = zip(self.location, submarine_location)
+        distance = sum((x[0] - x[1])**2 for x in values)**0.5
+        reply = str(distance <= self.precision)
 
         return reply
 
@@ -390,15 +390,18 @@ class Measurement:
         self.precision = precision
         self.cost = cost
         self.has_detected_submarine = has_detected_submarine
-        self.value: list = value
+        self.value = value
         self.is_lying: bool = is_lying
 
-    def addition(self, uncertainty):
-        self.value = list(map(lambda value: value.addition(uncertainty).intersection(Simulation.domain()), self.value))
+    def __iadd__(self, uncertainty: intervals.Uncertainty):
+        self.value += uncertainty
+        self.value &= Simulation.domain()
         return self
 
-    def is_valid(self):
-        return all(value != intervals.IntervalExpression.empty() and value != Simulation.domain() for value in self.value)
+    def __add__(self, uncertainty: intervals.Uncertainty):
+        result = copy.deepcopy(self)
+        result += uncertainty
+        return result
 
 class Batch:
     def __init__(self, id: int, timestamp: int):
@@ -408,10 +411,22 @@ class Batch:
         self.type_id = 'batch'
         self.decay = 0
 
-    def update(self, uncertainty):
-        self.measurements = list(map(lambda value: value.addition(uncertainty), self.measurements))
-        self.measurements = list(filter(lambda value: value.is_valid(), self.measurements))
+    def __len__(self):
+        return self.measurements.__len__()
+
+    def __iter__(self):
+        return self.measurements.__iter__()
+
+    def __iadd__(self, uncertainty: intervals.Uncertainty):
+        self.measurements = [x + uncertainty for x in self]
+        self.measurements = [x for x in self if x.value in Simulation.domain() and not x.value == Simulation.domain()]
         self.decay += uncertainty.absolute
+        return self
+
+    def __add__(self, uncertainty: intervals.Uncertainty):
+        result = copy.deepcopy(self)
+        result += uncertainty
+        return result
 
 ###############################################################################
 # Alert
@@ -430,10 +445,15 @@ class Alert:
 
 class RedAlert(Alert):
     def __init__(self):
-        interval_left  = intervals.LeftEndpoint(40, False, True)
-        interval_right = intervals.RightEndpoint(45, False, True)
-        interval_expression = intervals.IntervalExpression([intervals.Interval(interval_left, interval_right)])
-        super().__init__([interval_expression], 10, 'RED ALERT!!!')
+        range = intervals.IntervalExpression([intervals.Interval(
+            left = intervals.LeftEndpoint(40, False, True),
+            right = intervals.RightEndpoint(45, False, True)
+        )])
+        super().__init__(
+            range = range,
+            cost = 10,
+            message = 'RED ALERT!!!'
+        )
 
     def trigger(self):
         Simulation.client_socket.send('win'.encode('utf8'))
@@ -441,20 +461,27 @@ class RedAlert(Alert):
 
 class YellowAlert(Alert):
     def __init__(self):
-        interval_left  = intervals.LeftEndpoint(45, True, False)
-        interval_right = intervals.RightEndpoint(70, False, True)
-        interval_expression = intervals.IntervalExpression([intervals.Interval(interval_left, interval_right)])
-        super().__init__([interval_expression], 5, 'Yellow alert!')
+        range = intervals.IntervalExpression([intervals.Interval(
+            left = intervals.LeftEndpoint(45, True, False),
+            right = intervals.RightEndpoint(70, False, True)
+        )])
+        super().__init__(
+            range = range,
+            cost = 5,
+            message = 'Yellow alert!'
+        )
 
 
 class ShipState():
-    def __init__(self, location, timestamp, total_cost, graph, batches, state):
+    def __init__(self, location, timestamp, total_cost, graph, batches, state, probe_counter, batch_counter):
         self.location = location
         self.timestamp = timestamp
         self.total_cost = total_cost
         self.graph = graph
         self.batches = batches
         self.state = state
+        self.probe_counter = probe_counter
+        self.batch_counter = batch_counter
 
 class AlarmOutput:
     def __init__(self, alert: Alert, state: ShipState):
@@ -516,18 +543,18 @@ class Ship(Movable, Decidable):
         decay = clock_output.decay
         state = clock_output.state
 
+        # Generate result
+        #result = Simulation.domain()
+        #for batch in state.batches:
+        #    for probe in batch:
+        #        result &= probe.value
+
         # Create log
         # Ship
-        result = [Simulation.domain()] * len(state.location)
-        for batch in state.batches:
-            for measurement in batch.measurements:
-                function = lambda value: value[0].intersection(value[1])
-                parameters = zip(result, measurement.value)
-                result = list(map(function, parameters))
         csv_content = [state.location]
         csv_content += [state.timestamp]
         csv_content += [state.total_cost]
-        csv_content += [result]
+        csv_content += [state.state]
 
         # Submarine
         submarine_location, submarine_timestamp = Submarine.get_values()
@@ -539,62 +566,46 @@ class Ship(Movable, Decidable):
 
         # Probes
         for batch in state.batches:
-            for measurement in batch.measurements:
-                csv_content += [measurement.id]
+            for probe in batch:
+                csv_content += [probe.id]
                 csv_content += [batch.id]
                 csv_content += [batch.timestamp]
-                csv_content += [measurement.location]
-                csv_content += [measurement.precision]
+                csv_content += [probe.location]
+                csv_content += [probe.precision]
                 csv_content += [batch.decay]
-                csv_content += [measurement.cost]
-                csv_content += [measurement.has_detected_submarine]
-                csv_content += [measurement.value]
+                csv_content += [probe.cost]
+                csv_content += [probe.has_detected_submarine]
+                csv_content += [probe.value]
         Simulation.put(csv_content)
         InterfaceHandler.wait()
         state.timestamp += 1
 
         # Create log
-        empty_batches = []
-        for batch in state.batches:
-            batch.update(intervals.AbsoluteUncertainty(0, decay))
-            if len(batch.measurements) == 0:
-                empty_batches += [batch]
-        for batch in empty_batches:
-            state.batches.remove(batch)
+        sources = state.state
+        targets = copy.deepcopy(state.state)
+        targets += intervals.AbsoluteUncertainty(0, decay)
+        targets &= Simulation.domain()
+        state.batches = [x + intervals.AbsoluteUncertainty(0, decay) for x in state.batches]
+        state.batches = [x for x in state.batches if len(x) > 0]
 
         # Generate result
-        result = [Simulation.domain()] * len(state.location)
-        for batch in state.batches:
-            for measurement in batch.measurements:
-                function = lambda value: value[0].intersection(value[1])
-                parameters = zip(result, measurement.value)
-                result = list(map(function, parameters))
-        function = lambda value: value.intervals
-        dimensions = list(map(function, result))
-
-        function = lambda value: [value]
-        targets = list(map(function, dimensions[0]))
-        function = lambda value: value[0] + [value[1]] 
-        for dimension in dimensions[1:]:
-            targets = list(map(function, zip(targets, dimension)))
+        #result = Simulation.domain()
+        #for batch in state.batches:
+        #    for probe in batch:
+        #        result &= probe.value
 
         for target in targets:
-            sources = []
-            for source in state.state:
-                if all(value[0].contains(value[1]) for value in zip(target, source)):
-                    sources += [source]
-
-            print("sources " + str(sources))
-            print("target " + str([target]))
+            sub_sources = [source for source in sources if source in target]
 
             # Update graph
             state.graph += graphs.Hyperedge(
-                sources = sources,
+                sources = sub_sources,
                 targets = [target],
                 weight = 0,
                 label = 't' + str(state.timestamp)
             )
 
+        #state.state = result
         state.state = targets
 
         input = ClockInput(state)
@@ -604,16 +615,13 @@ class Ship(Movable, Decidable):
         alert = alarm_output.alert
         state = alarm_output.state
 
-        result = [Simulation.domain()] * len(state.location)
-        for batch in state.batches:
-            for measurement in batch.measurements:
-                function = lambda value: value[0].intersection(value[1])
-                parameters = zip(result, measurement.value)
-                result = list(map(function, parameters))
+        #result = Simulation.domain()
+        #for batch in state.batches:
+        #    for probe in batch:
+        #        result &= probe.value
 
-        if all(zip_value[0].contains(zip_value[1]) for zip_value in zip(alert.range, result)):
+        if state.state in alert.range:
             state.total_cost = alert.cost
-
             alert.trigger()
 
     def get_fresh_measurements(self, helicopter_output: HelicopterOutput) -> HelicopterInput:
@@ -621,9 +629,10 @@ class Ship(Movable, Decidable):
         state = helicopter_output.state
 
         # Heuristic Ephemeral Interval Byzantine Register
-        batch_id = len(state.batches) + 1
-        batch_timestamp = state.timestamp
-        batch = Batch(batch_id, batch_timestamp)
+        batch = Batch(
+            id = state.batch_counter,
+            timestamp = state.timestamp
+        )
 
         cost = 0
         for probe in processes:
@@ -631,41 +640,40 @@ class Ship(Movable, Decidable):
 
             reply = probe.synchronous_read()
             if reply == 'True':
-                measurement = Measurement(self.probe_counter, probe.location, probe.precision, probe.cost, reply, probe.interval, False)
+                value = probe.interval
             else:
-                measurement = Measurement(self.probe_counter, probe.location, probe.precision, probe.cost, reply, list(map(lambda value: value.negation().intersection(Simulation.domain()), probe.interval)), False)
+                value = ~probe.interval & Simulation.domain()
+            
+            batch.measurements += [Measurement(
+                id = state.probe_counter,
+                location = probe.location,
+                precision = probe.precision,
+                cost = probe.cost,
+                has_detected_submarine = reply == 'True',
+                value = value,
+                is_lying = False
+            )]
 
-            batch.measurements += [measurement]
-            self.probe_counter += 1
+            state.probe_counter += 1
 
         state.batches += [batch]
+        state.batch_counter += 1
         state.total_cost += cost
 
         # Generate result
-        result = [Simulation.domain()] * len(state.location)
-        for batch in state.batches:
-            for measurement in batch.measurements:
-                function = lambda value: value[0].intersection(value[1])
-                parameters = zip(result, measurement.value)
-                result = list(map(function, parameters))
-        function = lambda value: value.intervals
-        dimensions = list(map(function, result))
+        #result = Simulation.domain()
+        #for batch in state.batches:
+        #    for probe in batch:
+        #        result &= probe.value
 
-        function = lambda value: [value]
-        targets = list(map(function, dimensions[0]))
-        function = lambda value: value[0] + [value[1]] 
-        for dimension in dimensions[1:]:
-            targets = list(map(function, zip(targets, dimension)))
+        # Generate result
+        sources = state.state
+        targets = copy.deepcopy(state.state)
+        for probe in batch:
+            targets &= probe.value
 
-        print("sources " + str([state.state]))
-        for source in state.state:
-            sub_targets = []
-            for target in targets:
-                if all(value[0].contains(value[1]) for value in zip(source, target)):
-                    sub_targets += [target]
-
-            print("source " + str([source]))
-            print("targets " + str(targets))
+        for source in sources:
+            sub_targets = [target for target in targets if target in source]
 
             # Update graph
             state.graph += graphs.Hyperedge(
@@ -675,6 +683,7 @@ class Ship(Movable, Decidable):
                 label = 'b' + str(batch.id)
             )
 
+        #state.state = result
         state.state = targets
 
         input = HelicopterInput(state)
@@ -738,7 +747,9 @@ class Ship(Movable, Decidable):
 
         # Problem Solving Search Algorithm
         graph = graphs.Graph(
-            node = graphs.Node(Simulation.domain().intervals * len(self.location))
+            node = graphs.Node(
+                id = Simulation.domain().intervals[0]
+            )
         )
 
         initial_state = ShipState(
@@ -747,7 +758,9 @@ class Ship(Movable, Decidable):
             total_cost = 0,
             graph = graph,
             batches = [],
-            state = [Simulation.domain().intervals * len(self.location)]
+            state = Simulation.domain(),
+            probe_counter = 1,
+            batch_counter = 1
         )
         input = [ClockInput(initial_state)]
         problem = Problem(input)
@@ -757,17 +770,15 @@ class Ship(Movable, Decidable):
             problem = execute(solution)
 
     def __init__(self, location):
-        self.probe_counter = 1
-
         Movable.__init__(self, 'ship', 'ship', location, self.no_movement)
         #awareable.__init__(self, self.awareness)
         Decidable.__init__(self, self.strategy)
 
-    def __hash__(self):
-        return Movable.__hash__(self)
+    #def __hash__(self):
+    #    return Movable.__hash__(self)
 
-    def __hash__(self):
-        return super().__hash__()
+    #def __hash__(self):
+    #    return super().__hash__()
 
 class Submarine(Movable, Decidable):
     #lock = threading.Lock()
@@ -815,8 +826,8 @@ class Submarine(Movable, Decidable):
         #awareable.__init__(self, self.awareness)
         Decidable.__init__(self, self.hack_random_probe)
 
-    def __hash__(self):
-        return super().__hash__()
+    #def __hash__(self):
+    #    return super().__hash__()
 
 #graphs.test()
 #intervals.test()
