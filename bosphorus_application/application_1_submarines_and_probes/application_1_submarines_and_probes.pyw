@@ -3,6 +3,7 @@ import asyncio
 import atexit
 import copy
 import csv
+from deap import algorithms, base, creator, tools
 import functools
 import graphs
 import intervals
@@ -694,10 +695,154 @@ class Ship(Movable, Decidable):
 
     # Problem solving search algorithm
     def strategy(self):
+        def genGene(to_true_genpb):
+            return random.randint(1, 100) <= to_true_genpb
+
+        def evalUniformMaxPb(chromosome):
+            # Generate protein
+            protein = [False] * len(chromosome)
+            for x in range(len(chromosome)):
+                if chromosome[x]:
+                    for y in range(max(0, x - 3), min(len(chromosome), x + 3)):
+                        protein[y] = True
+
+            # Apply productivity formula
+            # where
+            #     output is the amount of 'good' amino acids
+            #     input is the amount of 'active' genes
+            output = sum(1 if x else 0 for x in protein)
+            input = sum(10 if x else 0 for x in chromosome)
+            productivity = output / input if input > 0 else 0
+
+            return productivity,
+
+        # Assumption: both chromosomes have the same size
+        def cxBiasedOnePoint(chromosome_1, chromosome_2):
+            # Check if both chromosomes are identical
+            if chromosome_1 == chromosome_2:
+                return chromosome_1, chromosome_2
+
+            # Identify first difference
+            for min_point in range(len(chromosome_1)):
+                if chromosome_1[min_point] != chromosome_2[min_point]:
+                    break
+
+            # Identify last difference
+            for max_point in range(len(chromosome_1) - 1, -1, -1):
+                if chromosome_1[max_point] != chromosome_2[max_point]:
+                    break
+
+            # Check if both chromosomes differ at one and only one gene
+            if min_point == max_point:
+                return chromosome_1, chromosome_2
+
+            cxpoint = random.randint(min_point, max_point)
+            chromosome_1[cxpoint:], chromosome_2[cxpoint:] = chromosome_2[cxpoint:], chromosome_1[cxpoint:]
+    
+            return chromosome_1, chromosome_2
+
+        def mutBiasedFlipBit(chromosome, to_true_mutpb, to_false_mutpb):
+            for x in range(len(chromosome)):
+                if chromosome[x]:
+                    if random.random() < to_false_mutpb:
+                        chromosome[x] = type(chromosome[x])(not chromosome[x])
+                else:
+                    if random.random() < to_true_mutpb:
+                        chromosome[x] = type(chromosome[x])(not chromosome[x])
+    
+            return chromosome,
+
+        # Start parameters
+        gene_pool_size = 100
+        chromosome_size = 100
+        to_true_genpb = 2
+        # Mutate parameters
+        to_true_mutpb = 0.005
+        to_false_mutpb = 0.05
+        # Select parameters
+        k = 10
+        # Algorithm parameters
+        cxpb = 1
+        mutpb = 1
+        ngen = 10
+        verbose = False
+        
+        creator.create(
+            'FitnessMax',
+            base.Fitness,
+            weights = (1.0,)
+        )
+        creator.create(
+            'Chromosome',
+            list,
+            fitness = creator.FitnessMax
+        )
+
+        toolbox = base.Toolbox()
+        toolbox.register(
+            'gene',
+            genGene,
+            to_true_genpb = to_true_genpb
+        )
+        toolbox.register(
+            'chromosome',
+            tools.initRepeat,
+            creator.Chromosome,
+            toolbox.gene,
+            n = chromosome_size
+        )
+        toolbox.register(
+            'gene_pool',
+            tools.initRepeat,
+            list,
+            toolbox.chromosome
+        )
+        toolbox.register(
+            'mate',
+            cxBiasedOnePoint
+        )
+        toolbox.register(
+            'mutate',
+            mutBiasedFlipBit,
+            to_true_mutpb = to_true_mutpb,
+            to_false_mutpb = to_false_mutpb
+        )
+        toolbox.register(
+            'select',
+            tools.selBest
+        )
+        toolbox.register(
+            'evaluate',
+            evalUniformMaxPb
+        )
+
         def search(parameters: list) -> Solution:
+            gene_pool = toolbox.gene_pool(
+                n = gene_pool_size
+            )
+
+            gene_pool = algorithms.eaSimple(
+                population = gene_pool,
+                toolbox = toolbox,
+                cxpb = cxpb,
+                mutpb = mutpb,
+                ngen = ngen,
+                verbose = verbose
+            )
+
+            #Start -> [[bool]]
+            #While Goal_Is_Not_Satisfied [[bool]] -> bool:
+            #   Fitness [[bool]] -> [int]
+            #   New_Population [[bool]], [int] -> [[bool]]
+            #   Replace [[bool]] -> [[bool]]
+            #return [[bool]]
+            
+            chosen_chromosome = gene_pool[0][random.randint(0, len(gene_pool))]
             processes = []
-            for n in range(1, random.randint(3, 4)):
-                processes += [Process(10, 3, [random.randint(0 + 3, 100 - 3)])]
+            for gene_is_active, position in zip(chosen_chromosome, range(0, chromosome_size)):
+                if gene_is_active:
+                    processes += [Process(10, 3, [position])]
+            print(len(processes))
 
             output = [AlarmOutput(parameters[1], parameters[0])]
             output += [ClockOutput(parameters[2], parameters[0])]
