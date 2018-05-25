@@ -1,14 +1,23 @@
+# coding=utf-8
+"""Intervals
+
+"""
+
 import copy
 import functools
 import time
 
+
 class Uncertainty:
+    """Uncertainty
+
+    """
     def __init__(self, center: float, absolute: float, relative: float):
         self.center: float = center
         self.absolute: float = absolute
         self.relative: float = relative
 
-    def __add__(self, other = None):
+    def __add__(self, other=None):
         if other is None:
             return self
 
@@ -18,7 +27,7 @@ class Uncertainty:
 
         return result
 
-    def __sub__(self, other = None):
+    def __sub__(self, other=None):
         if other is None:
             return self
 
@@ -28,7 +37,7 @@ class Uncertainty:
 
         return result
 
-    def __mul__(self, other = None):
+    def __mul__(self, other=None):
         if other is None:
             return self
 
@@ -38,7 +47,7 @@ class Uncertainty:
 
         return result
 
-    def __truediv__(self, other = None):
+    def __truediv__(self, other=None):
         if other is None:
             return self
 
@@ -48,7 +57,11 @@ class Uncertainty:
 
         return result
 
+
 class AbsoluteUncertainty(Uncertainty):
+    """Absolute uncertainty
+
+    """
     def __init__(self, center: float, absolute: float):
         relative = (absolute / center * 100) if center != 0 else 0
         super().__init__(center, absolute, relative)
@@ -56,7 +69,11 @@ class AbsoluteUncertainty(Uncertainty):
     def __repr__(self):
         return str(self.center) + ' +- ' + str(self.absolute)
 
+
 class RelativeUncertainty(Uncertainty):
+    """Relative uncertainty
+
+    """
     def __init__(self, center: float, relative: float):
         absolute = relative * center / 100
         super().__init__(center, absolute, relative)
@@ -64,25 +81,42 @@ class RelativeUncertainty(Uncertainty):
     def __repr__(self):
         return str(self.center) + ' +- ' + str(self.relative) + '%'
 
+
 class Endpoint:
+    """Endpoint
+
+    """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         self.value: float = value
         self.is_open: bool = is_open
         self.is_closed: bool = is_closed
 
     def is_bounded(self):
+        """
+
+        :return:
+        """
         return self.is_open != self.is_closed
 
     def is_unbounded(self):
+        """
+
+        :return:
+        """
         return self.is_open == self.is_closed
 
     def __eq__(self, other):
-        return (self.value == other.value and self.is_open == other.is_open) or (self.is_unbounded() and other.is_unbounded())
+        return (self.value == other.value and self.is_open == other.is_open) or (
+                    self.is_unbounded() and other.is_unbounded())
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
+
 class LeftEndpoint(Endpoint):
+    """Left endpoint
+
+    """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
 
@@ -94,11 +128,11 @@ class LeftEndpoint(Endpoint):
 
     def __ge__(self, other):
         return other.is_unbounded() \
-            or self.is_bounded() \
-            and self.value >= other.value \
-            and (  self.value != other.value \
-                or self.is_open \
-                or other.is_closed )
+               or self.is_bounded() \
+               and self.value >= other.value \
+               and (self.value != other.value
+                    or self.is_open
+                    or other.is_closed)
 
     def __gt__(self, other):
         return self.__ge__(other) and self.__ne__(other)
@@ -112,7 +146,11 @@ class LeftEndpoint(Endpoint):
     def __repr__(self):
         return ('(' if self.is_open else '[') + ('LOW' if self.is_unbounded() else str(self.value))
 
+
 class RightEndpoint(Endpoint):
+    """Right endpoint
+
+    """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
 
@@ -124,11 +162,11 @@ class RightEndpoint(Endpoint):
 
     def __le__(self, other):
         return other.is_unbounded() \
-            or self.is_bounded() \
-            and self.value <= other.value \
-            and (  self.value != other.value \
-                or self.is_open \
-                or other.is_closed )
+               or self.is_bounded() \
+               and self.value <= other.value \
+               and (self.value != other.value
+                    or self.is_open
+                    or other.is_closed)
 
     def __lt__(self, other):
         return self.__le__(other) and self.__ne__(other)
@@ -142,65 +180,137 @@ class RightEndpoint(Endpoint):
     def __repr__(self):
         return ('HIGH' if self.is_unbounded() else str(self.value)) + (')' if self.is_open else ']')
 
+
 class Interval:
+    """Interval
+
+    """
     def __init__(self, left: LeftEndpoint, right: RightEndpoint):
-        self.left:  LeftEndpoint  = left
+        self.left: LeftEndpoint = left
         self.right: RightEndpoint = right
 
     def endpoints(self):
+        """
+
+        :return:
+        """
         return [self.left, self.right]
 
     def is_unbounded(self) -> bool:
+        """
+
+        :return:
+        """
         return all(value.is_unbounded() for value in self.endpoints())
 
     def is_bounded(self) -> bool:
+        """
+
+        :return:
+        """
         return all(value.is_bounded() for value in self.endpoints())
 
     def is_closed(self) -> bool:
+        """
+
+        :return:
+        """
         return all(value.is_closed for value in self.endpoints())
 
     def is_not_closed(self) -> bool:
+        """
+
+        :return:
+        """
         return not self.is_closed()
 
     def is_open(self) -> bool:
+        """
+
+        :return:
+        """
         return all(value.is_open for value in self.endpoints())
 
     def is_degenerated(self) -> bool:
+        """
+
+        :return:
+        """
         return self.is_bounded() and self.is_closed() and self.left.value == self.right.value
 
     def is_half_open(self) -> bool:
+        """
+
+        :return:
+        """
         return self.left.is_open != self.right.is_open and self.left.is_closed != self.right.is_closed
 
     def is_half_bounded(self) -> bool:
+        """
+
+        :return:
+        """
         return self.left.is_bounded() != self.right.is_bounded()
 
     def is_not_bounded(self) -> bool:
+        """
+
+        :return:
+        """
         return not self.is_bounded()
 
     def is_proper(self) -> bool:
+        """
+
+        :return:
+        """
         return self.is_not_bounded() or self.left.value < self.right.value
 
     def is_empty(self) -> bool:
+        """
+
+        :return:
+        """
         return not self.is_degenerated() and not self.is_proper()
 
     def is_not_empty(self) -> bool:
+        """
+
+        :return:
+        """
         return not self.is_empty()
 
     def is_infinitesimal(self) -> bool:
+        """
+
+        :return:
+        """
         return self.is_half_open() and self.left.value == self.right.value
 
     def is_not_infinitesimal(self) -> bool:
+        """
+
+        :return:
+        """
         return not self.is_infinitesimal()
 
     @classmethod
     def empty(cls):
-        interval_left  = LeftEndpoint(0, True, False)
+        """
+
+        :return:
+        """
+        interval_left = LeftEndpoint(0, True, False)
         interval_right = RightEndpoint(0, True, False)
         return cls(interval_left, interval_right)
 
     @classmethod
     def domain(cls):
-        interval_left  = LeftEndpoint(0, True, True)
+        """
+
+        :return:
+        """
+        interval_left = LeftEndpoint(0, True, True)
         interval_right = RightEndpoint(0, True, True)
         return cls(interval_left, interval_right)
 
@@ -228,36 +338,44 @@ class Interval:
         elif self.is_degenerated():
             return '{' + str(self.left.value) + '}'
         else:
-            return str(self.left) + ('..') + str(self.right)
+            return str(self.left) + '..' + str(self.right)
 
     def __contains__(self, other):
-        print(str(other) +" in " + str(self) + "?")
+        # print(str(other) + " in " + str(self) + "?")
+        # noinspection PyChainedComparisons
         return self.is_not_empty() and other.is_not_empty() and self <= other and self >= other
 
     def __ior__(self, other):
-        fst, snd = sorted((self, other))
-        gap = Interval(snd.left, fst.right)
+        gap = Interval(
+            left=max(self, other).left,
+            right=min(self, other).right
+        )
 
         # empty and not infinitesimal
         if gap.is_empty() and gap.is_not_infinitesimal():
-            raise Exception("Invalid union: " + str(self) +  " and " + str(other))
+            return self, other
         # proper or degenerated or infinitesimal
-        self.left = min(self.left,  other.left)
+        self.left = min(self.left, other.left)
         self.right = max(self.right, other.right)
         return self
 
     def __iand__(self, other):
-        fst, snd = sorted((self, other))
-        gap = Interval(snd.left, fst.right)
+        gap = Interval(
+            left=max(self, other).left,
+            right=min(self, other).right
+        )
 
-        # empty
-        if gap.is_empty():
-            self = Interval.empty()
-        # proper or degenerated
-        else:
-            self.left  = max(self.left,  other.left)
-            self.right = min(self.right, other.right)
-        return self
+        return (
+            # if empty
+            Interval.empty()
+            if gap.is_empty()
+            else
+            # if proper or degenerated
+            Interval(
+                left=max(self.left, other.left),
+                right=min(self.right, other.right)
+            )
+        )
 
     def __iadd__(self, other: Uncertainty):
         self_absolute = (self.right.value - self.left.value) / 2
@@ -307,9 +425,14 @@ class Interval:
         result |= other
         return result
 
+
 class IntervalExpression:
+    """Interval expression
+
+    """
     def __init__(self, intervals: list):
-        self.intervals = sorted(list(filter(lambda value: value.is_not_empty(), intervals)))
+        self.intervals = [x for x in intervals if x.is_not_empty()]
+        self.intervals.sort()
 
     def __eq__(self, other):
         if len(self.intervals) == 0:
@@ -317,22 +440,50 @@ class IntervalExpression:
         elif len(other.intervals) == 0:
             return False
         else:
-            return all(value[0] == value[1] for value in zip((self | IntervalExpression.empty()).intervals, (other | IntervalExpression.empty()).intervals))
+            return all(x[0] == x[1] for x in zip(self, other))
 
     def __ne__(self, other):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return functools.reduce(lambda acc, value: str(acc) + (' or ' if acc != '' else '') + str(value), self.intervals, '') \
-            if self != IntervalExpression.empty() else '()'
+        return (
+            functools.reduce(
+                lambda acc, value: str(acc) + (' or ' if acc != '' else '') + str(value),
+                self.intervals,
+                ''
+            )
+            if self != IntervalExpression.empty()
+            else
+            '()'
+        )
 
     @classmethod
     def empty(cls):
+        """
+
+        :return:
+        """
         return cls([])
 
     @classmethod
     def domain(cls):
+        """
+
+        :return:
+        """
         return cls([Interval.domain()])
+
+    def sort(self):
+        """Sort
+
+        """
+        self.intervals.sort()
+        for fst, (index, snd) in zip(self.intervals[1:], enumerate(self.intervals[:-1])):
+            fst |= snd
+            if isinstance(fst, Interval):
+                del self.intervals[index]
+            else:
+                fst, _ = fst
 
     def __iter__(self):
         return self.intervals.__iter__()
@@ -346,65 +497,62 @@ class IntervalExpression:
 
         acc = []
         stack = None
-        for value in (self | IntervalExpression.empty()).intervals:
-            if value.left.is_bounded():
+        self.sort()
+        for x in self:
+            if x.left.is_bounded():
                 if stack is not None:
                     left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
                 else:
-                    left = LeftEndpoint(None, True, True)
-                right = RightEndpoint(value.left.value, value.left.is_closed, value.left.is_open)
+                    left = LeftEndpoint(0, True, True)
+                right = RightEndpoint(x.left.value, x.left.is_closed, x.left.is_open)
                 acc += [Interval(left, right)]
                 stack = None
-            if value.right.is_bounded():
-                stack = value.right
+            if x.right.is_bounded():
+                stack = x.right
         if stack is not None:
             left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
-            right = RightEndpoint(None, True, True)
+            right = RightEndpoint(0, True, True)
             acc += [Interval(left, right)]
 
         return IntervalExpression(acc)
 
     def __ior__(self, other):
-        intervals = []
-        for interval in sorted(self.intervals + other.intervals):
-            try:
-                intervals[-1] = intervals[-1] | interval
-            except Exception:
-                intervals += [interval]
-        self.intervals = intervals
+        self.intervals += copy.deepcopy(other.intervals)
+        self.sort()
+
         return self
 
     def __iand__(self, other):
-        #print('')
-        #print('Intersection:')
-        #print('(' + str(self) + ') and (' + str(other) + ')')
-        #print('not ' + str(self) + ' = ' + str(not_self))
-        #print('not ' + str(other) + ' = ' + str(not_other))
-        #print(str(not_self) + ' u ' + str(not_other) + ' = ' + str(not_result))
-        #print('not ' + str(not_result) + ' = ' + str(result))
-        #if result.intervals[-1].right.is_unbounded():
+        # print('')
+        # print('Intersection:')
+        # print('(' + str(self) + ') and (' + str(other) + ')')
+        # print('not ' + str(self) + ' = ' + str(not_self))
+        # print('not ' + str(other) + ' = ' + str(not_other))
+        # print(str(not_self) + ' or ' + str(not_other) + ' = ' + str(not_result))
+        # print('not ' + str(not_result) + ' = ' + str(result))
+        # if result.intervals[-1].right.is_unbounded():
         #    print('')
-        #else:
+        # else:
         #    print('')
-        #print('')
-        #print('')
+        # print('')
+        # print('')
 
         # Applying De Morgan's Laws
-        self = ~self
+        self.intervals = (~self).intervals
         self |= ~other
-        self = ~self
+        self.intervals = (~self).intervals
         return self
 
     def __iadd__(self, other: Uncertainty):
         for interval in self:
             interval += other
-        self |= IntervalExpression.empty()
+        self.sort()
         return self
 
     def __isub__(self, other: Uncertainty):
         for interval in self:
             interval -= other
-        self |= IntervalExpression.empty()
+        self.sort()
         return self
 
     def __add__(self, other: Uncertainty):
@@ -427,43 +575,47 @@ class IntervalExpression:
         result |= other
         return result
 
+
 def test():
+    """Test
+
+    """
     l0 = LeftEndpoint(-1, True, True)  # (LOW
-    l1 = LeftEndpoint(0, True, True)   # (LOW
+    l1 = LeftEndpoint(0, True, True)  # (LOW
     l2 = LeftEndpoint(0, False, True)  # [0
     l3 = LeftEndpoint(0, True, False)  # (0
-    l4 = LeftEndpoint(1, True, True)   # (LOW
+    l4 = LeftEndpoint(1, True, True)  # (LOW
     l5 = LeftEndpoint(1, False, True)  # [1
     l6 = LeftEndpoint(1, True, False)  # (1
 
-    r0 = RightEndpoint(-1, True, True) # HIGH)
+    r0 = RightEndpoint(-1, True, True)  # HIGH)
     r1 = RightEndpoint(1, True, True)  # HIGH)
-    r2 = RightEndpoint(1, False, True) # 1]
-    r3 = RightEndpoint(1, True, False) # 1)
+    r2 = RightEndpoint(1, False, True)  # 1]
+    r3 = RightEndpoint(1, True, False)  # 1)
     r4 = RightEndpoint(0, True, True)  # HIGH)
-    r5 = RightEndpoint(0, False, True) # 0]
-    r6 = RightEndpoint(0, True, False) # 0)
-    r7 = RightEndpoint(5, False, True) # 5]
+    r5 = RightEndpoint(0, False, True)  # 0]
+    r6 = RightEndpoint(0, True, False)  # 0)
+    r7 = RightEndpoint(5, False, True)  # 5]
 
-    i0 = IntervalExpression([Interval(l1, r1)]) # (LOW..HIGH)
-    i1 = IntervalExpression([Interval(l1, r2)]) # (LOW..1]
-    i2 = IntervalExpression([Interval(l1, r3)]) # (LOW..1)
-    i3 = IntervalExpression([Interval(l2, r1)]) # [0..HIGH)
-    i4 = IntervalExpression([Interval(l2, r2)]) # [0..1]
-    i5 = IntervalExpression([Interval(l2, r3)]) # [0..1)
-    i6 = IntervalExpression([Interval(l3, r1)]) # (0..HIGH)
-    i7 = IntervalExpression([Interval(l3, r2)]) # (0..1]
-    i8 = IntervalExpression([Interval(l3, r3)]) # (0..1)
-    i9 = IntervalExpression([Interval(l5, r5)]) # [1..0] -> ()
-    i10 = IntervalExpression([Interval(l1, r6)]) # (LOW..0)
-    i11 = IntervalExpression([Interval(l6, r1)]) # (1..HIGH)
-    i12 = IntervalExpression([Interval(l2, r7)]) # [0..5]
+    i0 = IntervalExpression([Interval(l1, r1)])  # (LOW..HIGH)
+    i1 = IntervalExpression([Interval(l1, r2)])  # (LOW..1]
+    i2 = IntervalExpression([Interval(l1, r3)])  # (LOW..1)
+    i3 = IntervalExpression([Interval(l2, r1)])  # [0..HIGH)
+    i4 = IntervalExpression([Interval(l2, r2)])  # [0..1]
+    i5 = IntervalExpression([Interval(l2, r3)])  # [0..1)
+    i6 = IntervalExpression([Interval(l3, r1)])  # (0..HIGH)
+    i7 = IntervalExpression([Interval(l3, r2)])  # (0..1]
+    i8 = IntervalExpression([Interval(l3, r3)])  # (0..1)
+    i9 = IntervalExpression([Interval(l5, r5)])  # [1..0] -> ()
+    i10 = IntervalExpression([Interval(l1, r6)])  # (LOW..0)
+    i11 = IntervalExpression([Interval(l6, r1)])  # (1..HIGH)
+    i12 = IntervalExpression([Interval(l2, r7)])  # [0..5]
 
-    e0 = IntervalExpression.empty() # ()
-    e1 = IntervalExpression.domain() # (LOW..HIGH)
+    e0 = IntervalExpression.empty()  # ()
+    e1 = IntervalExpression.domain()  # (LOW..HIGH)
 
     print(str(i7 | i11))
-    print(str(e0 | i10 | i11) + ' n ' + str(i12) + ' = ' + str((e0 | i10 | i11) & i12))
+    print(str(e0 | i10 | i11) + ' and ' + str(i12) + ' = ' + str((e0 | i10 | i11) & i12))
     print('-----------------------')
     print('left_endpoint:')
     print('')
@@ -585,20 +737,22 @@ def test():
     print('-----------------------')
     print('interval_expression:')
     print('')
-    print(str(e0) + ' u ' + str(i1) + ' = ' + str(e0 | i1))
-    print(str(e0) + ' / ' + str(i1) + ' = ' + str(~(e0 | i1)))
-    print(str(e0) + ' n ' + str(i1) + ' = ' + str(e0 & i1))
-    print(str(e0) + ' u ' + str(i2) + ' = ' + str(e0 | i2))
-    print(str(e0) + ' / ' + str(i2) + ' = ' + str(~(e0 | i2)))
-    print(str(e0) + ' n ' + str(i2) + ' = ' + str(e0 & i2))
-    print(str(i1) + ' u ' + str(i2) + ' = ' + str(e0 | i1 | i2))
-    print(str(i2) + ' u ' + str(i1) + ' = ' + str(e0 | i2 | i1))
-    print(str(i1) + ' n ' + str(i2) + ' = ' + str((e0 | i1) & i2))
-    print(str(i2) + ' n ' + str(i1) + ' = ' + str((e0 | i2) & i1))
-    print(str(e0) + ' / ' + str(i7) + ' = ' + str(~(e0 | i7)))
-    print(str(e1) + ' n ' + str(i7) + ' = ' + str(e1 & i7))
+    print(str(e0) + ' or ' + str(i1) + ' = ' + str(e0 | i1))
+    print('not ' + str(i1) + ' = ' + str(~i1))
+    print(str(e0) + ' and ' + str(i1) + ' = ' + str(e0 & i1))
+    print(str(e0) + ' or ' + str(i2) + ' = ' + str(e0 | i2))
+    print('not ' + str(i2) + ' = ' + str(~i2))
+    print(str(e0) + ' and ' + str(i2) + ' = ' + str(e0 & i2))
+    print(str(i1) + ' or ' + str(i2) + ' = ' + str(i1 | i2))
+    print(i2)
+    print(str(i2) + ' or ' + str(i1) + ' = ' + str(i2 | i1))
+    print(i2)
+    print(str(i1) + ' and ' + str(i2) + ' = ' + str(i1 & i2))
+    print(str(i2) + ' and ' + str(i1) + ' = ' + str(i2 & i1))
+    print('not ' + str(i7) + ' = ' + str(~i7))
+    print(str(e1) + ' and ' + str(i7) + ' = ' + str(e1 & i7))
     print(str(e1) + ' in ' + str(i7) + ' = ' + str(e1 in i7))
     print(str(i7) + ' in ' + str(e1) + ' = ' + str(i7 in e1))
 
-    while(True):
+    while True:
         time.sleep(1000)
