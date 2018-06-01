@@ -47,6 +47,11 @@ class Hyperedge:
         self.weight: int = weight     # Weighted
         self.label: str = label       # Vertex-transitive
 
+    def __iter__(self):
+        return self.targets.__iter__()
+
+    def __getitem__(self, key):
+        return self.targets.__getitem__(key)
 
 class Node:
     """Node
@@ -56,6 +61,14 @@ class Node:
         self.label = label
         self.edges: dict = {}
 
+    def __iter__(self):
+        return self.edges.__iter__()
+
+    def __getitem__(self, key):
+        return self.edges.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        return self.edges.__setitem__(key, value)
 
 class Graph:
     """Graph
@@ -63,6 +76,15 @@ class Graph:
     """
     def __init__(self, node: Node):
         self.nodes: dict = {str(node.label): node}
+
+    def __iter__(self):
+        return self.nodes.__iter__()
+
+    def __getitem__(self, key):
+        return self.nodes.__getitem__(key)
+
+    def __contains__(self, node: Node):
+        return str(node) in self.nodes
 
     def __iadd__(self, hyperedge: Hyperedge):
         # Connected Graph => ANY node in graph points to new node
@@ -80,13 +102,12 @@ class Graph:
         #        #raise CyclicGraphException('Node ' + str(new_node.id) + ' has formed a cycle')
         #    edges = dict(reduce(lambda acc, edge: {**acc, **self.nodes[edge.direction].edges}, edges))
 
-        for target in hyperedge.targets:
-            # Add target into graph
-            self.nodes[str(target)] = Node(target)
+        new_nodes = {str(x): Node(x) for x in hyperedge if x not in self}
+        self.nodes = {**self.nodes, **new_nodes}
 
         for source in hyperedge.sources:
             # Add hyperedge into source
-            self.nodes[str(source)].edges[hyperedge.label] = hyperedge
+            self[str(source)][hyperedge.label] = hyperedge
 
         return self
 
@@ -101,17 +122,17 @@ class Graph:
             directory=directory,
             format='png'
         )
-        for node_id in self.nodes:
+        for node_label in self:
             dot.node(
-                name=node_id
+                name=node_label
             )
-        for source in self.nodes.values():
-            for edge in source.edges.values():
-                for target in edge.targets:
+        for source_label in self:
+            for edge_label in self[source_label]:
+                for target_label in self[source_label][edge_label]:
                     dot.edge(
-                        tail_name=str(source.id),
-                        head_name=str(target),
-                        label=edge.label
+                        tail_name=str(source_label),
+                        head_name=str(target_label),
+                        label=edge_label
                     )
         dot.render()
 

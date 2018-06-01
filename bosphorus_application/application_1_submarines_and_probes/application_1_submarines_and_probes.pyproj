@@ -24,7 +24,16 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="application_1_submarines_and_probes.pyw" />
+    <Compile Include="automata.py">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="generators.py">
+      <SubType>Code</SubType>
+    </Compile>
     <Compile Include="graphs.pyw">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="interface.py">
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="intervals.pyw">

@@ -51,7 +51,7 @@ private void OnSuspending(
 {
     //Debug.WriteLine("quit");
 
-    var data = Encoding.UTF8.GetBytes("quit");
+    var data = Encoding.UTF8.GetBytes("quit_input");
     try
     {
         stream.Write(data, 0, data.Length);
@@ -61,7 +61,7 @@ private void OnSuspending(
 }
 
 private async void OnThreadStartAsync() {
-    var server = Dns.GetHostName();
+    var server = "127.0.0.1";
     var port = 3000;
 
     var size = 100000;
@@ -79,6 +79,9 @@ private async void OnThreadStartAsync() {
 
     socket_client = new TcpClient(server, port);
     stream = socket_client.GetStream();
+
+    var ack = Encoding.UTF8.GetBytes("ack_input");
+    stream.Write(ack, 0, ack.Length);
 
     Application.Current.Suspending += OnSuspending;
 
@@ -117,9 +120,40 @@ private async void OnThreadStartAsync() {
 
 private void UpdatePage(string[] csv)
 {
-    if (csv[0] == "enable_stop") {
+    System.Diagnostics.Debug.Write(csv.Length + " -> ");
+    System.Diagnostics.Debug.WriteLine(String.Join(",", csv));
+    if (csv[0] == "previous") {
+        PreviousDelegate = ApplyPrevious;
+        Previous.IsEnabled = true;
+        return;
+    }
+    if (csv[0] == "next") {
+        NextDelegate = ApplyNext;
+        Next.IsEnabled = true;
+        return;
+    }
+    if (csv[0] == "pause") {
+        var symbol_icon = Pause.Content as SymbolIcon;
+        symbol_icon.Symbol = Symbol.Pause;
+        PauseDelegate = ApplyPause;
+        Pause.IsEnabled = true;
+        return;
+    }
+    if (csv[0] == "play") {
+        var symbol_icon = Pause.Content as SymbolIcon;
+        symbol_icon.Symbol = Symbol.Play;
+        PauseDelegate = ApplyPlay;
+        Pause.IsEnabled = true;
+        return;
+    }
+    if (csv[0] == "stop") {
         StopDelegate = ApplyStop;
         Stop.IsEnabled = true;
+        return;
+    }
+    if (csv[0] == "repeat-all") {
+        RepeatAllDelegate = ApplyRepeatAll;
+        RepeatAll.IsEnabled = true;
         return;
     }
 
@@ -127,8 +161,6 @@ private void UpdatePage(string[] csv)
     submarine.SubmarineViewItems.Clear();
     batches.BatchesViewItems.Clear();
     if (csv[0] == "reset") {
-        NextDelegate = ApplyNext;
-        Next.IsEnabled = true;
         return;
     }
     var vals = csv.Skip(1);
@@ -178,17 +210,8 @@ private void UpdatePage(string[] csv)
         vals = vals.Skip(9);
     }
 
-    //PreviousDelegate = ApplyPrevious;
-    NextDelegate = ApplyNext;
-    //PauseDelegate = ApplyPause;
-    StopDelegate = ApplyStop;
-    //RepeatAllDelegate = ApplyRepeatAll;
-
-    //Previous.IsEnabled = true;
-    Next.IsEnabled = true;
-    //Pause.IsEnabled = true;
-    Stop.IsEnabled = true;
-    //RepeatAll.IsEnabled = true;
+    var data = Encoding.UTF8.GetBytes("ack_input");
+    stream.Write(data, 0, data.Length);
 }
 
 private void ApplyPrevious()
@@ -210,11 +233,8 @@ private void ApplyNext()
     StopDelegate = null;
     RepeatAllDelegate = null;
 
-    var data = Encoding.UTF8.GetBytes("next");
+    var data = Encoding.UTF8.GetBytes("next_input");
     stream.Write(data, 0, data.Length);
-
-    var symbol_icon = Pause.Content as SymbolIcon;
-    symbol_icon.Symbol = Symbol.Play;
 }
 
 private void ApplyPause()
@@ -231,23 +251,8 @@ private void ApplyPause()
     StopDelegate = null;
     RepeatAllDelegate = null;
 
-    var data = Encoding.UTF8.GetBytes("pause");
+    var data = Encoding.UTF8.GetBytes("pause_input");
     stream.Write(data, 0, data.Length);
-
-    var symbol_icon = Pause.Content as SymbolIcon;
-    symbol_icon.Symbol = Symbol.Play;
-
-    //PreviousDelegate = ApplyPrevious;
-    NextDelegate = ApplyNext;
-    //PauseDelegate = ApplyPause;
-    StopDelegate = ApplyStop;
-    //RepeatAllDelegate = ApplyRepeatAll;
-
-    //Previous.IsEnabled = true;
-    Next.IsEnabled = true;
-    //Pause.IsEnabled = true;
-    Stop.IsEnabled = true;
-    //RepeatAll.IsEnabled = true;
 }
 
 private void ApplyPlay()
@@ -264,23 +269,8 @@ private void ApplyPlay()
     StopDelegate = null;
     RepeatAllDelegate = null;
 
-    var data = Encoding.UTF8.GetBytes("play");
+    var data = Encoding.UTF8.GetBytes("play_input");
     stream.Write(data, 0, data.Length);
-
-    var symbol_icon = Pause.Content as SymbolIcon;
-    symbol_icon.Symbol = Symbol.Pause;
-
-    //PreviousDelegate = ApplyPrevious;
-    NextDelegate = ApplyNext;
-    //PauseDelegate = ApplyPause;
-    StopDelegate = ApplyStop;
-    //RepeatAllDelegate = ApplyRepeatAll;
-
-    //Previous.IsEnabled = true;
-    Next.IsEnabled = true;
-    //Pause.IsEnabled = true;
-    Stop.IsEnabled = true;
-    //RepeatAll.IsEnabled = true;
 }
 
 private void ApplyStop()
@@ -297,7 +287,7 @@ private void ApplyStop()
     StopDelegate = null;
     RepeatAllDelegate = null;
 
-    var data = Encoding.UTF8.GetBytes("stop");
+    var data = Encoding.UTF8.GetBytes("stop_input");
     stream.Write(data, 0, data.Length);
 }
 
@@ -315,7 +305,7 @@ private void ApplyRepeatAll()
     StopDelegate = null;
     RepeatAllDelegate = null;
 
-    var data = Encoding.UTF8.GetBytes("repeat_all");
+    var data = Encoding.UTF8.GetBytes("repeat_all_input");
     stream.Write(data, 0, data.Length);
 }
 
@@ -337,20 +327,20 @@ private void OnKeyUp(
 {
     switch (e.Key)
     {
-        //case VirtualKey.Left:
+        //case VirtualKey.H:
         //    PreviousDelegate?.Invoke();
         //    break;
-        case VirtualKey.Right:
+        case VirtualKey.L:
             NextDelegate?.Invoke();
             break;
-        //case VirtualKey.Space:
-        //    PauseDelegate?.Invoke();
-        //    break;
+        case VirtualKey.Space:
+            PauseDelegate?.Invoke();
+            break;
         case VirtualKey.Escape:
             StopDelegate?.Invoke();
             break;
         case VirtualKey.R:
-            StopDelegate?.Invoke();
+            RepeatAllDelegate?.Invoke();
             break;
     }
 }

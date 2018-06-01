@@ -13,9 +13,9 @@ class Uncertainty:
 
     """
     def __init__(self, center: float, absolute: float, relative: float):
-        self.center: float = center
-        self.absolute: float = absolute
-        self.relative: float = relative
+        self.center: float = float(center)
+        self.absolute: float = float(absolute)
+        self.relative: float = float(relative)
 
     def __add__(self, other=None):
         if other is None:
@@ -87,7 +87,7 @@ class Endpoint:
 
     """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
-        self.value: float = value
+        self.value: float = float(value)
         self.is_open: bool = is_open
         self.is_closed: bool = is_closed
 
@@ -478,10 +478,10 @@ class IntervalExpression:
 
         """
         self.intervals.sort()
-        for fst, (index, snd) in zip(self.intervals[1:], enumerate(self.intervals[:-1])):
+        for fst, snd in zip(self.intervals[1:], self.intervals[:-1]):
             fst |= snd
             if isinstance(fst, Interval):
-                del self.intervals[index]
+                self.intervals.remove(snd)
             else:
                 fst, _ = fst
 
