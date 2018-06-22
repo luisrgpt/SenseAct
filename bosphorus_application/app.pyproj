@@ -4,13 +4,13 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>4abc6eba-cc1d-405d-9759-98fa1fbd1128</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>application_1_submarines_and_probes.pyw</StartupFile>
+    <StartupFile>src/main.pyw</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
-    <Name>application_1_submarines_and_probes</Name>
-    <RootNamespace>application_1_submarines_and_probes</RootNamespace>
+    <Name>app</Name>
+    <RootNamespace>app</RootNamespace>
     <IsWindowsApplication>True</IsWindowsApplication>
     <InterpreterId>Global|PythonCore|3.6</InterpreterId>
   </PropertyGroup>
@@ -23,20 +23,24 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="application_1_submarines_and_probes.pyw" />
-    <Compile Include="automata.py">
+    <Compile Include="src/dynamic.py">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="generators.py">
+    <Compile Include="src/genetic.pyw" />
+    <Compile Include="src/main.pyw" />
+    <Compile Include="src/automata.pyw">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="graphs.pyw">
+    <Compile Include="src/generators.pyw">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="interface.py">
+    <Compile Include="src/graphs.pyw">
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="intervals.pyw">
+    <Compile Include="src/interface.pyw">
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="src/intervals.pyw">
       <SubType>Code</SubType>
     </Compile>
   </ItemGroup>
@@ -45,6 +49,9 @@
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="Global|PythonCore|3.6" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="src\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

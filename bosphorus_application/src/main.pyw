@@ -1,9 +1,7 @@
 # coding=utf-8
-"""Application
+"""Main
 
 """
-
-
 import automata
 import interface
 import generators
@@ -264,6 +262,9 @@ ui = interface.Handler(app)
 
 # graphs.test()
 # intervals.test()
+generators.test()
+# genetic.test()
+# dynamic.test()
 app += 'init_input'
 
 

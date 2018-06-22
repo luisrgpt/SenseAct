@@ -2,11 +2,8 @@
 """Intervals
 
 """
-
-import copy
 import functools
 import time
-
 
 class Uncertainty:
     """Uncertainty
@@ -16,7 +13,6 @@ class Uncertainty:
         self.center: float = float(center)
         self.absolute: float = float(absolute)
         self.relative: float = float(relative)
-
     def __add__(self, other=None):
         if other is None:
             return self
@@ -26,7 +22,6 @@ class Uncertainty:
         result = AbsoluteUncertainty(result_center, result_absolute)
 
         return result
-
     def __sub__(self, other=None):
         if other is None:
             return self
@@ -36,7 +31,6 @@ class Uncertainty:
         result = AbsoluteUncertainty(result_center, result_absolute)
 
         return result
-
     def __mul__(self, other=None):
         if other is None:
             return self
@@ -46,7 +40,6 @@ class Uncertainty:
         result = RelativeUncertainty(result_center, result_relative)
 
         return result
-
     def __truediv__(self, other=None):
         if other is None:
             return self
@@ -56,8 +49,6 @@ class Uncertainty:
         result = RelativeUncertainty(result_center, result_relative)
 
         return result
-
-
 class AbsoluteUncertainty(Uncertainty):
     """Absolute uncertainty
 
@@ -65,11 +56,8 @@ class AbsoluteUncertainty(Uncertainty):
     def __init__(self, center: float, absolute: float):
         relative = (absolute / center * 100) if center != 0 else 0
         super().__init__(center, absolute, relative)
-
     def __repr__(self):
         return str(self.center) + ' +- ' + str(self.absolute)
-
-
 class RelativeUncertainty(Uncertainty):
     """Relative uncertainty
 
@@ -77,10 +65,8 @@ class RelativeUncertainty(Uncertainty):
     def __init__(self, center: float, relative: float):
         absolute = relative * center / 100
         super().__init__(center, absolute, relative)
-
     def __repr__(self):
         return str(self.center) + ' +- ' + str(self.relative) + '%'
-
 
 class Endpoint:
     """Endpoint
@@ -90,96 +76,97 @@ class Endpoint:
         self.value: float = float(value)
         self.is_open: bool = is_open
         self.is_closed: bool = is_closed
-
-    def is_bounded(self):
-        """
-
-        :return:
-        """
-        return self.is_open != self.is_closed
-
-    def is_unbounded(self):
-        """
-
-        :return:
-        """
-        return self.is_open == self.is_closed
+        self.is_unbounded: bool = is_open == is_closed
+        self.is_bounded: bool = is_open != is_closed
 
     def __eq__(self, other):
         return (self.value == other.value and self.is_open == other.is_open) or (
-                    self.is_unbounded() and other.is_unbounded())
-
+                    self.is_unbounded and other.is_unbounded)
     def __ne__(self, other):
         return not self.__eq__(other)
 
-
+    def __iadd__(self, other: float):
+        self.value += other
+        return self
+    def __isub__(self, other: float):
+        self.value -= other
+        return self
 class LeftEndpoint(Endpoint):
     """Left endpoint
 
     """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
+    def __deepcopy__(self, memodict={}):
+        return LeftEndpoint(self.value, self.is_open, self.is_closed)
 
     def __eq__(self, other):
         return super().__eq__(other)
-
     def __ne__(self, other):
         return super().__ne__(other)
-
     def __ge__(self, other):
-        return other.is_unbounded() \
-               or self.is_bounded() \
+        return other.is_unbounded \
+               or self.is_bounded \
                and self.value >= other.value \
                and (self.value != other.value
                     or self.is_open
                     or other.is_closed)
-
     def __gt__(self, other):
         return self.__ge__(other) and self.__ne__(other)
-
     def __le__(self, other):
         return not self.__gt__(other)
-
     def __lt__(self, other):
         return not self.__ge__(other)
 
+    def __add__(self, other: float):
+        result = self.__deepcopy__()
+        result += other
+        return result
+    def __sub__(self, other: float):
+        result = self.__deepcopy__()
+        result -= other
+        return result
+
     def __repr__(self):
-        return ('(' if self.is_open else '[') + ('LOW' if self.is_unbounded() else str(self.value))
-
-
+        return ('(' if self.is_open else '[') + ('LOW' if self.is_unbounded else str(self.value))
 class RightEndpoint(Endpoint):
     """Right endpoint
 
     """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
+    def __deepcopy__(self, memodict={}):
+        return RightEndpoint(self.value, self.is_open, self.is_closed)
 
     def __eq__(self, other):
         return super().__eq__(other)
-
     def __ne__(self, other):
         return super().__ne__(other)
-
     def __le__(self, other):
-        return other.is_unbounded() \
-               or self.is_bounded() \
+        return other.is_unbounded \
+               or self.is_bounded \
                and self.value <= other.value \
                and (self.value != other.value
                     or self.is_open
                     or other.is_closed)
-
     def __lt__(self, other):
         return self.__le__(other) and self.__ne__(other)
-
     def __ge__(self, other):
         return not self.__lt__(other)
-
     def __gt__(self, other):
         return not self.__le__(other)
 
-    def __repr__(self):
-        return ('HIGH' if self.is_unbounded() else str(self.value)) + (')' if self.is_open else ']')
+    def __add__(self, other: float):
+        result = self.__deepcopy__()
+        result += other
+        return result
+    def __sub__(self, other: float):
+        result = self.__deepcopy__()
+        result -= other
+        return result
 
+    def __repr__(self):
+        return ('HIGH' if self.is_unbounded else str(self.value)) + (')' if self.is_open else ']')
 
 class Interval:
     """Interval
@@ -188,111 +175,21 @@ class Interval:
     def __init__(self, left: LeftEndpoint, right: RightEndpoint):
         self.left: LeftEndpoint = left
         self.right: RightEndpoint = right
-
-    def endpoints(self):
-        """
-
-        :return:
-        """
-        return [self.left, self.right]
-
-    def is_unbounded(self) -> bool:
-        """
-
-        :return:
-        """
-        return all(value.is_unbounded() for value in self.endpoints())
-
-    def is_bounded(self) -> bool:
-        """
-
-        :return:
-        """
-        return all(value.is_bounded() for value in self.endpoints())
-
-    def is_closed(self) -> bool:
-        """
-
-        :return:
-        """
-        return all(value.is_closed for value in self.endpoints())
-
-    def is_not_closed(self) -> bool:
-        """
-
-        :return:
-        """
-        return not self.is_closed()
-
-    def is_open(self) -> bool:
-        """
-
-        :return:
-        """
-        return all(value.is_open for value in self.endpoints())
-
-    def is_degenerated(self) -> bool:
-        """
-
-        :return:
-        """
-        return self.is_bounded() and self.is_closed() and self.left.value == self.right.value
-
-    def is_half_open(self) -> bool:
-        """
-
-        :return:
-        """
-        return self.left.is_open != self.right.is_open and self.left.is_closed != self.right.is_closed
-
-    def is_half_bounded(self) -> bool:
-        """
-
-        :return:
-        """
-        return self.left.is_bounded() != self.right.is_bounded()
-
-    def is_not_bounded(self) -> bool:
-        """
-
-        :return:
-        """
-        return not self.is_bounded()
-
-    def is_proper(self) -> bool:
-        """
-
-        :return:
-        """
-        return self.is_not_bounded() or self.left.value < self.right.value
-
-    def is_empty(self) -> bool:
-        """
-
-        :return:
-        """
-        return not self.is_degenerated() and not self.is_proper()
-
-    def is_not_empty(self) -> bool:
-        """
-
-        :return:
-        """
-        return not self.is_empty()
-
-    def is_infinitesimal(self) -> bool:
-        """
-
-        :return:
-        """
-        return self.is_half_open() and self.left.value == self.right.value
-
-    def is_not_infinitesimal(self) -> bool:
-        """
-
-        :return:
-        """
-        return not self.is_infinitesimal()
+        self.is_bounded = left.is_bounded and right.is_bounded
+        self.is_unbounded = left.is_unbounded and right.is_unbounded
+        self.is_closed = left.is_closed and right.is_closed
+        self.is_degenerated = self.is_bounded and self.is_closed and left.value == right.value
+        self.is_proper = not self.is_bounded or left.value < right.value
+        self.is_empty = not self.is_degenerated and not self.is_proper
+    def __deepcopy__(self, memodict={}):
+        return Interval(
+            left=self.left.__deepcopy__(),
+            right=self.right.__deepcopy__()
+        )
+    def __iter__(self):
+        return self.range()
+    def __len__(self):
+        return int(self.right.value - self.left.value) if self.is_bounded else None
 
     @classmethod
     def empty(cls):
@@ -303,7 +200,6 @@ class Interval:
         interval_left = LeftEndpoint(0, True, False)
         interval_right = RightEndpoint(0, True, False)
         return cls(interval_left, interval_right)
-
     @classmethod
     def domain(cls):
         """
@@ -313,37 +209,118 @@ class Interval:
         interval_left = LeftEndpoint(0, True, True)
         interval_right = RightEndpoint(0, True, True)
         return cls(interval_left, interval_right)
+    def is_not_closed(self) -> bool:
+        """
 
-    def __lt__(self, other):
-        return self.left < other.left
+        :return:
+        """
+        return not self.is_closed
+    def is_open(self) -> bool:
+        """
 
-    def __gt__(self, other):
-        return other.right < self.right
+        :return:
+        """
+        return self.left.is_open and self.right.is_open
+    def is_half_open(self) -> bool:
+        """
 
-    def __eq__(self, other):
-        return self.left == other.left and self.right == other.right or self.is_empty() and other.is_empty()
+        :return:
+        """
+        return self.left.is_open != self.right.is_open and self.left.is_closed != self.right.is_closed
+    def is_half_bounded(self) -> bool:
+        """
 
-    def __le__(self, other):
-        return self.left <= other.left or self.__eq__(other)
+        :return:
+        """
+        return self.left.is_bounded != self.right.is_bounded
+    def is_not_bounded(self) -> bool:
+        """
 
-    def __ge__(self, other):
-        return other.right <= self.right or self.__eq__(other)
+        :return:
+        """
+        return not self.is_bounded
+    def is_not_empty(self) -> bool:
+        """
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
+        :return:
+        """
+        return not self.is_empty
+    def is_infinitesimal(self) -> bool:
+        """
+
+        :return:
+        """
+        return self.is_half_open() and self.left.value == self.right.value
+    def is_not_infinitesimal(self) -> bool:
+        """
+
+        :return:
+        """
+        return not self.is_infinitesimal()
+
+    def range(self):
+        if self.is_empty or self.is_unbounded:
+            raise StopIteration()
+
+        left = self.left.__deepcopy__()
+        right = (
+            RightEndpoint(self.left.value, False, True)
+            if self.left.is_closed
+            else
+            RightEndpoint(self.left.value + 1, True, False)
+        )
+        current = Interval(left, right)
+        while current.right <= self.right:
+            current = Interval(left, right)
+            yield current
+            if current.right < self.right:
+                if current.right.is_open:
+                    current.right.is_open = False
+                    current.right.is_closed = True
+                else:
+                    current.right += 1
+                    current.right.is_open = True
+                    current.right.is_closed = False
+            else:
+                if current.left.is_closed:
+                    current.left.is_open = True
+                    current.left.is_closed = False
+                    current.right.value = current.left.value + 1
+                    current.right.is_open = True
+                    current.right.is_closed = False
+                else:
+                    current.left += 1
+                    current.left.is_open = False
+                    current.left.is_closed = True
+                    current.right.value = current.left.value
+                    current.right.is_open = False
+                    current.right.is_closed = True
+        raise StopIteration()
 
     def __repr__(self):
-        if self.is_empty():
+        if self.is_empty:
             return '()'
-        elif self.is_degenerated():
+        elif self.is_degenerated:
             return '{' + str(self.left.value) + '}'
         else:
             return str(self.left) + '..' + str(self.right)
-
     def __contains__(self, other):
         # print(str(other) + " in " + str(self) + "?")
         # noinspection PyChainedComparisons
         return self.is_not_empty() and other.is_not_empty() and self <= other and self >= other
+
+    def __lt__(self, other):
+        return self.left < other.left
+    def __gt__(self, other):
+        return other.right < self.right
+    def __eq__(self, other):
+        return self.left == other.left and self.right == other.right or self.is_empty and other.is_empty
+    def __le__(self, other):
+        return self.left <= other.left or self.__eq__(other)
+    def __ge__(self, other):
+        return other.right <= self.right or self.__eq__(other)
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __ior__(self, other):
         gap = Interval(
@@ -352,13 +329,20 @@ class Interval:
         )
 
         # empty and not infinitesimal
-        if gap.is_empty() and gap.is_not_infinitesimal():
+        if gap.is_empty and gap.is_not_infinitesimal():
             return self, other
         # proper or degenerated or infinitesimal
         self.left = min(self.left, other.left)
         self.right = max(self.right, other.right)
-        return self
 
+        self.is_bounded = self.left.is_bounded and self.right.is_bounded
+        self.is_unbounded = self.left.is_unbounded and self.right.is_unbounded
+        self.is_closed = self.left.is_closed and self.right.is_closed
+        self.is_degenerated = self.is_bounded and self.is_closed and self.left.value == self.right.value
+        self.is_proper = not self.is_bounded or self.left.value < self.right.value
+        self.is_empty = not self.is_degenerated and not self.is_proper
+
+        return self
     def __iand__(self, other):
         gap = Interval(
             left=max(self, other).left,
@@ -368,7 +352,7 @@ class Interval:
         return (
             # if empty
             Interval.empty()
-            if gap.is_empty()
+            if gap.is_empty
             else
             # if proper or degenerated
             Interval(
@@ -376,7 +360,6 @@ class Interval:
                 right=min(self.right, other.right)
             )
         )
-
     def __iadd__(self, other: Uncertainty):
         self_absolute = (self.right.value - self.left.value) / 2
         self_center = self.left.value + self_absolute
@@ -390,7 +373,6 @@ class Interval:
         self.right.value = center + absolute
 
         return self
-
     def __isub__(self, other: Uncertainty):
         self_absolute = (self.right.value - self.left.value) / 2
         self_center = self.left.value + self_absolute
@@ -404,27 +386,22 @@ class Interval:
         self.right.value = center + absolute
 
         return self
-
     def __add__(self, other: Uncertainty):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result += other
         return result
-
     def __sub__(self, other: Uncertainty):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result -= other
         return result
-
     def __and__(self, other):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result &= other
         return result
-
     def __or__(self, other):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result |= other
         return result
-
 
 class IntervalExpression:
     """Interval expression
@@ -433,6 +410,42 @@ class IntervalExpression:
     def __init__(self, intervals: list):
         self.intervals = [x for x in intervals if x.is_not_empty()]
         self.intervals.sort()
+    def __iter__(self):
+        return self.intervals.__iter__()
+    def __getitem__(self, item):
+        return self.intervals.__getitem__(item)
+    def __len__(self):
+        return self.intervals.__len__()
+    def __deepcopy__(self, memodict={}):
+        return IntervalExpression(
+            intervals=[x.__deepcopy__() for x in self]
+        )
+
+    @classmethod
+    def empty(cls):
+        """
+
+        :return:
+        """
+        return cls([])
+    @classmethod
+    def domain(cls):
+        """
+
+        :return:
+        """
+        return cls([Interval.domain()])
+    def sort(self):
+        """Sort
+
+        """
+        self.intervals.sort()
+        for fst, snd in zip(self.intervals[1:], self.intervals[:-1]):
+            fst |= snd
+            if isinstance(fst, Interval):
+                self.intervals.remove(snd)
+            else:
+                fst, _ = fst
 
     def __eq__(self, other):
         if len(self.intervals) == 0:
@@ -441,9 +454,10 @@ class IntervalExpression:
             return False
         else:
             return all(x[0] == x[1] for x in zip(self, other))
-
     def __ne__(self, other):
         return not self.__eq__(other)
+    def __contains__(self, other):
+        return all(any(small_interval in big_interval for big_interval in self) for small_interval in other)
 
     def __repr__(self):
         return (
@@ -457,49 +471,15 @@ class IntervalExpression:
             '()'
         )
 
-    @classmethod
-    def empty(cls):
-        """
-
-        :return:
-        """
-        return cls([])
-
-    @classmethod
-    def domain(cls):
-        """
-
-        :return:
-        """
-        return cls([Interval.domain()])
-
-    def sort(self):
-        """Sort
-
-        """
-        self.intervals.sort()
-        for fst, snd in zip(self.intervals[1:], self.intervals[:-1]):
-            fst |= snd
-            if isinstance(fst, Interval):
-                self.intervals.remove(snd)
-            else:
-                fst, _ = fst
-
-    def __iter__(self):
-        return self.intervals.__iter__()
-
-    def __contains__(self, other):
-        return all(any(small_interval in big_interval for big_interval in self) for small_interval in other)
-
     def __invert__(self):
-        if self == IntervalExpression.empty():
+        if len(self) == 0:
             return IntervalExpression.domain()
 
         acc = []
         stack = None
         self.sort()
         for x in self:
-            if x.left.is_bounded():
+            if x.left.is_bounded:
                 if stack is not None:
                     left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
                 else:
@@ -507,7 +487,7 @@ class IntervalExpression:
                 right = RightEndpoint(x.left.value, x.left.is_closed, x.left.is_open)
                 acc += [Interval(left, right)]
                 stack = None
-            if x.right.is_bounded():
+            if x.right.is_bounded:
                 stack = x.right
         if stack is not None:
             left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
@@ -515,13 +495,11 @@ class IntervalExpression:
             acc += [Interval(left, right)]
 
         return IntervalExpression(acc)
-
     def __ior__(self, other):
-        self.intervals += copy.deepcopy(other.intervals)
+        self.intervals += [x.__deepcopy__() for x in other]
         self.sort()
 
         return self
-
     def __iand__(self, other):
         # print('')
         # print('Intersection:')
@@ -542,44 +520,43 @@ class IntervalExpression:
         self |= ~other
         self.intervals = (~self).intervals
         return self
-
     def __iadd__(self, other: Uncertainty):
         for interval in self:
             interval += other
         self.sort()
         return self
-
     def __isub__(self, other: Uncertainty):
         for interval in self:
             interval -= other
         self.sort()
         return self
-
     def __add__(self, other: Uncertainty):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result += other
         return result
-
     def __sub__(self, other: Uncertainty):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result -= other
         return result
-
     def __and__(self, other):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result &= other
         return result
-
     def __or__(self, other):
-        result = copy.deepcopy(self)
+        result = self.__deepcopy__()
         result |= other
         return result
-
 
 def test():
     """Test
 
     """
+    for x in Interval(
+        left=LeftEndpoint(0, False, True),
+        right=RightEndpoint(10, False, True)
+    ):
+        print(IntervalExpression([x]))
+
     l0 = LeftEndpoint(-1, True, True)  # (LOW
     l1 = LeftEndpoint(0, True, True)  # (LOW
     l2 = LeftEndpoint(0, False, True)  # [0
