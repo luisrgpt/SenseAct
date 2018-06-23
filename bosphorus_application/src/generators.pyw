@@ -3,34 +3,15 @@
 
 """
 import csv
-from dynamic import dynamic
-from genetic import domain, chromosome_size, generator
-import graphs
+from genetic import chromosome_size, get_genetic_result
+from graphs import Graph, Node, Hyperedge
 from intervals import AbsoluteUncertainty, Uncertainty, Interval, IntervalExpression, LeftEndpoint, RightEndpoint
 import math
 import random
 import time
-import typing
-
-
-def generate_submarine(location):
-    """
-    :rtype: object
-
-    """
-    timestamp = 0
-    while True:
-        yield location, timestamp
-
-        velocity = [-x for x in location]
-        norm = math.sqrt(sum(x**2 for x in velocity))
-        if norm == 0:
-            raise StopIteration()
-
-        normalized_vector = [x / norm for x in velocity]
-
-        location = [x[0] + x[1] for x in zip(location, normalized_vector)]
-        timestamp += 1
+from itertools import chain
+from genetic import get_cost, get_genetic_result
+from time import sleep
 
 class Alert:
     """Alert
@@ -88,6 +69,25 @@ class YellowAlert(Alert):
             message=YellowAlert.message
         )
 
+def generate_submarine(location):
+    """
+    :rtype: object
+
+    """
+    timestamp = 0
+    while True:
+        yield location, timestamp
+
+        velocity = [-x for x in location]
+        norm = math.sqrt(sum(x**2 for x in velocity))
+        if norm == 0:
+            raise StopIteration()
+
+        normalized_vector = [x / norm for x in velocity]
+
+        location = [x[0] + x[1] for x in zip(location, normalized_vector)]
+        timestamp += 1
+
 class Probe:
     """Probe
 
@@ -129,8 +129,16 @@ class Measurement:
         self.is_lying: bool = is_lying
     def __repr__(self):
         return str(self.location) + ": " + str(self.has_detected_submarine)
-    def __deepcopy__(self, memodict={}):
-        return Measurement(self.label, self.location, self.precision, self.cost, self.has_detected_submarine, self.value, self.is_lying)
+    def __deepcopy__(self, memodict=None):
+        return Measurement(
+            self.label,
+            self.location,
+            self.precision,
+            self.cost,
+            self.has_detected_submarine,
+            self.value,
+            self.is_lying
+        )
 
     def __iadd__(self, uncertainty: Uncertainty):
         self.value += uncertainty
@@ -157,7 +165,7 @@ class Batch:
         return self.measurements.__iter__()
     def __repr__(self):
         return '\n'.join([str(x) for x in self])
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
         return Batch(self.label, self.timestamp, self.measurements)
 
     def __iadd__(self, uncertainty: Uncertainty):
@@ -170,332 +178,46 @@ class Batch:
         result += uncertainty
         return result
 
-class ShipState:
+class ByzantineProblem:
     """Ship state
 
     """
 
-    def __init__(self, location, timestamp, total_cost, graph, batches, state, probe_counter, batch_counter, submarine, genes):
-        self.location = location
-        self.timestamp = timestamp
-        self.total_cost = total_cost
-        self.graph = graph
-        self.batches = batches
-        self.state = state
-        self.probe_counter = probe_counter
-        self.batch_counter = batch_counter
-        self.submarine = submarine
-        self.genes = genes
-class AlarmOutput:
-    """Alarm output
-
-    """
-
-    def __init__(self, state: ShipState):
-        self.state: ShipState = state
-class HelicopterOutput:
-    """Helicopter output
-
-    """
-
-    def __init__(self, processes: list, state: ShipState):
-        self.processes: list = processes
-        self.state: ShipState = state
-class ClockOutput:
-    """Clock output
-
-    """
-
-    def __init__(self, decay: int, state: ShipState):
-        self.decay: int = decay
-        self.state: ShipState = state
-class HelicopterInput:
-    """Helicopter input
-
-    """
-
-    def __init__(self, state: ShipState):
-        self.state: ShipState = state
-class ClockInput:
-    """Clock input
-
-    """
-
-    def __init__(self, state: ShipState):
-        self.state: ShipState = state
-
-class Solution:
-    """Solution
-
-    """
-
-    def __init__(self, output: list):
-        self.output: list = output
-class Problem:
-    """Problem
-
-    """
-
-    def __init__(self, inputs: list):
-        self.inputs: list = inputs
-class Formula:
-    """Formula
-
-    """
-
-    def __init__(self, search_function: typing.Callable[[list], Solution], parameters: list):
-        self.search_function: typing.Callable[[list], Solution] = search_function
-        self.parameters: list = parameters
-
-def wait(clock_output: ClockOutput) -> ClockInput:
-    """
-
-    :return:
-    :param clock_output:
-    :return:
-    """
-    decay = clock_output.decay
-    state = clock_output.state
-
-    state.timestamp += 1
-    Probe.submarine_location, _ = next(state.submarine)
-
-    # Create log
-    sources = state.state
-    targets = state.state.__deepcopy__()
-    targets += AbsoluteUncertainty(0, decay)
-    targets &= domain()
-    state.batches = [x + AbsoluteUncertainty(0, decay) for x in state.batches]
-    state.batches = [x for x in state.batches if len(x) > 0]
-
-    for target in targets:
-        sub_sources = [source for source in sources if source in target]
-
-        # Update graph
-        state.graph += graphs.Hyperedge(
-            sources=sub_sources,
-            targets=[target],
-            weight=0,
-            label='Wait'
-        )
-
-    state.state.intervals = targets.intervals
-
-    inputs = ClockInput(state)
-    return inputs
-def try_alert(alarm_output: AlarmOutput):
-    """
-
-    :param alarm_output:
-    """
-    state = alarm_output.state
-
-    for alert in [RedAlert(), YellowAlert()]:
-        if (state.state & alert.interval) != IntervalExpression.empty():
-            state.total_cost += alert.cost
-            alert.trigger()
-            break
-def get_fresh_measurements(helicopter_output: HelicopterOutput) -> HelicopterInput:
-    """
-
-    :param helicopter_output:
-    :return:
-    """
-    processes = helicopter_output.processes
-    state = helicopter_output.state
-
-    # Heuristic Ephemeral Interval Byzantine Register
-    measurements = []
-    for probe in processes:
-        state.total_cost += probe.cost
-
-        reply = probe.synchronous_read()
-        if reply == 'True':
-            value = probe.interval
-        else:
-            value = ~probe.interval & domain()
-
-        measurements += [Measurement(
-            label=state.probe_counter,
-            location=probe.location,
-            precision=probe.precision,
-            cost=probe.cost,
-            has_detected_submarine=reply == 'True',
-            value=value,
-            is_lying=False
-        )]
-
-        state.probe_counter += 1
-
-    if len(measurements) > 0:
-        batch = Batch(
-            label=state.batch_counter,
-            timestamp=state.timestamp,
-            measurements=measurements
-        )
-        state.batches += [batch]
-        state.batch_counter += 1
-
-        # Generate result
-        sources = state.state
-        targets = state.state.__deepcopy__()
-        cost = sum(x.cost for x in batch)
-
-        for probe in batch:
-            targets &= probe.value
-
-        for source in sources:
-            sub_targets = [target for target in targets if target in source]
-
-            # Update graph
-            state.graph += graphs.Hyperedge(
-                sources=[source],
-                targets=sub_targets,
-                weight=cost,
-                label=str(batch)
-            )
-
-        state.state.intervals = targets.intervals
-
-    inputs = HelicopterInput(state)
-    return inputs
-
-def search(parameters: list) -> Solution:
-    """
-
-    :param parameters:
-    :return:
-    """
-    gene_pool = next(parameters[0].genes)
-    chosen_chromosome = random.choice(gene_pool)
-    processes = []
-    for gene_is_active, position in zip(chosen_chromosome, range(0, chromosome_size)):
-        if gene_is_active:
-            processes += [Probe(10, 3, [position])]
-    # print(len(processes))
-
-    output = [ClockOutput(parameters[1], parameters[0])]
-    output += [HelicopterOutput(processes, parameters[0])]
-    output += [AlarmOutput(parameters[0])]
-
-
-    return Solution(output)
-
-# Search algorithm
-def formulate(problem: Problem) -> Formula:
-    """
-
-    :param problem:
-    :return:
-    """
-    state = None
-    for x in problem.inputs:
-        if type(x) == HelicopterInput:
-            state = x.state
-        elif type(x) == ClockInput:
-            state = x.state
-
-    parameters = [state]
-    parameters += [1]
-
-    return Formula(search, parameters)
-def apply(formula: Formula) -> Solution:
-    """
-
-    :param formula:
-    :return:
-    """
-    return formula.search_function(formula.parameters)
-def execute(solution: Solution) -> Problem:
-    """
-
-    :param solution:
-    :return:
-    """
-    inputs = []
-    for x in solution.output:
-        if type(x) == AlarmOutput:
-            try_alert(x)
-        elif type(x) == HelicopterOutput:
-            if len(inputs) > 0 and (type(inputs[-1]) == ClockInput or type(inputs[-1]) == HelicopterOutput):
-                x.state = inputs[-1].state
-                inputs[-1] = get_fresh_measurements(x)
-            else:
-                inputs += [get_fresh_measurements(x)]
-        elif type(x) == ClockOutput:
-            if len(inputs) > 0 and (type(inputs[-1]) == ClockInput or type(inputs[-1]) == HelicopterOutput):
-                x.state = inputs[-1].state
-                inputs[-1] = [wait(x)]
-            else:
-                inputs += [wait(x)]
-
-    return Problem(inputs)
-
-def generate_ship(location):
-    state = domain()
-    cost = {
-        str((0, x)): {
-            "": (
-                RedAlert.cost
-                if (x & RedAlert.interval_expression[0]) != Interval.empty()
-                else
-                YellowAlert.cost
-                if (x & YellowAlert.interval_expression[0]) != Interval.empty()
-                else
-                0
-            )
-        } for x in Interval(
-            left=LeftEndpoint(0, False, True),
-            right=RightEndpoint(100, False, True)
-        )
-    }
-    time = 1
-    genetic = generator(state, cost, time)
-
-    gen = dynamic(100, state, cost, genetic, time)
-
-    submarine = generate_submarine([random.randint(0, 100)])
-
-    problem = Problem([ClockInput(
-        ShipState(
-            location=location,
-            timestamp=0,
-            total_cost=0,
-            graph=graphs.Graph(
-                node=graphs.Node(
-                    label=domain().intervals[0]
+    def __init__(self, ship_location, submarine_location, computation_rate):
+        self.location = ship_location
+        self.timestamp = 0
+        self.total_cost = 0
+        self.graph = Graph(
+                node=Node(
+                    label=str(submarine_location)
                 )
-            ),
-            batches=[],
-            state=state,
-            probe_counter=1,
-            batch_counter=1,
-            submarine=submarine,
-            genes=genetic
-        )
-    )])
-    for _ in gen:
-        state = problem.inputs[0].state
-
+            )
+        self.batches: list = []
+        self.submarine_location: IntervalExpression = submarine_location
+        self.probe_counter: int = 1
+        self.batch_counter: int = 1
+        self.submarine = generate_submarine([random.randint(0, 100)])
+        self.computation_rate = computation_rate
+    def __repr__(self):
         # Create log
         # Ship
         csv_content = [time.strftime('%Y_%m_%d_%H_%M_%S')]
-        csv_content += [state.location]
-        csv_content += [state.timestamp]
-        csv_content += [state.total_cost]
-        csv_content += [state.state]
+        csv_content += [self.location]
+        csv_content += [self.timestamp]
+        csv_content += [self.total_cost]
+        csv_content += [self.submarine_location]
 
         # Submarine
         csv_content += [Probe.submarine_location]
-        csv_content += [state.timestamp]
+        csv_content += [self.timestamp]
 
         # Graph
-        csv_content += [state.graph.save_into_disk_and_get_file_name(
+        csv_content += [self.graph.save_into_disk_and_get_file_name(
             '../../borphorus_interface/user_interface_1_wpf/bin/x64/Debug/AppX'
         )]
 
         # Probes
-        for batch in state.batches:
+        for batch in self.batches:
             for probe in batch:
                 csv_content += [probe.label]
                 csv_content += [batch.label]
@@ -512,37 +234,190 @@ def generate_ship(location):
         stream = csv.StringIO()
         writer = csv.writer(stream)
         writer.writerow(csv_content)
-        stream_value = stream.getvalue()
+        return stream.getvalue()
 
-        yield stream_value
+    def __iadd__(self, solution):
+        """
 
+        :param solution:
+        :return:
+        """
+        self.timestamp += 1
+        Probe.submarine_location, _ = next(self.submarine)
 
-        formula = formulate(problem)
-        solution = apply(formula)
-        problem = execute(solution)
+        # Create log
+        sources = self.submarine_location
+        targets = self.submarine_location.__deepcopy__()
+        targets += AbsoluteUncertainty(0, 1)
+        targets &= domain()
+        self.batches = [x + AbsoluteUncertainty(0, 1) for x in self.batches]
+        self.batches = [x for x in self.batches if len(x) > 0]
+        for target in targets:
+            sub_sources = [source for source in sources if source in target]
 
-def test():
-    state = domain()
-    cost = {
-        str((0, x)): {
-            "": (
-                RedAlert.cost
-                if (x & RedAlert.interval_expression[0]) != Interval.empty()
-                else
-                YellowAlert.cost
-                if (x & YellowAlert.interval_expression[0]) != Interval.empty()
-                else
-                0
+            # Update graph
+            self.graph += Hyperedge(
+                sources=sub_sources,
+                targets=[target],
+                weight=0,
+                label='Wait'
             )
-        } for x in Interval(
+        self.submarine_location.intervals = targets.intervals
+
+        # Heuristic Ephemeral Interval Byzantine Register
+        measurements = []
+        for probe in solution.processes:
+            self.total_cost += probe.cost
+
+            reply = probe.synchronous_read()
+            if reply == 'True':
+                value = probe.interval
+            else:
+                value = ~probe.interval & domain()
+
+            measurements += [Measurement(
+                label=self.probe_counter,
+                location=probe.location,
+                precision=probe.precision,
+                cost=probe.cost,
+                has_detected_submarine=reply == 'True',
+                value=value,
+                is_lying=False
+            )]
+            self.probe_counter += 1
+        if len(measurements) > 0:
+            batch = Batch(
+                label=self.batch_counter,
+                timestamp=self.timestamp,
+                measurements=measurements
+            )
+            self.batches += [batch]
+            self.batch_counter += 1
+            # Generate result
+            sources = self.submarine_location
+            targets = self.submarine_location.__deepcopy__()
+            cost = sum(x.cost for x in batch)
+            for probe in batch:
+                targets &= probe.value
+            for source in sources:
+                sub_targets = [target for target in targets if target in source]
+
+                # Update graph
+                self.graph += Hyperedge(
+                    sources=[source],
+                    targets=sub_targets,
+                    weight=cost,
+                    label=str(batch)
+                )
+            self.submarine_location.intervals = targets.intervals
+
+        self.total_cost += (
+            RedAlert.cost
+            if (self.submarine_location & RedAlert.interval_expression) != Interval.empty()
+            else
+            YellowAlert.cost
+            if (self.submarine_location & YellowAlert.interval_expression) != Interval.empty()
+            else
+            0
+        )
+
+        return self
+class DynamicFormula:
+    """Formula
+
+    """
+
+    def __init__(self):
+        self.submarine_location = None
+        self.cost = {
+            str((0, x)): {
+                "": (
+                    RedAlert.cost
+                    if (x & RedAlert.interval_expression[0]) != Interval.empty()
+                    else
+                    YellowAlert.cost
+                    if (x & YellowAlert.interval_expression[0]) != Interval.empty()
+                    else
+                    0
+                )
+            } for x in Interval(
+                left=LeftEndpoint(0, False, True),
+                right=RightEndpoint(100, False, True)
+            )
+        }
+        self.depth = 0
+    def __iadd__(self, problem: ByzantineProblem):
+        """
+
+        :param problem:
+        :return:
+        """
+        print(problem.submarine_location)
+        for time in range(1, problem.computation_rate):
+            for sub_interval in zip(chain.from_iterable(problem.submarine_location)):
+                top5 = get_genetic_result(problem.submarine_location, self.cost, self.depth, 5)
+                self.cost[str((time, sub_interval))] = {
+                    str(x): get_cost(time, sub_interval, problem.submarine_location, self.cost)
+                    for x in top5
+                }
+
+                # print(str((t, x)) + ": " + str(list(cost[str((t, x))].values())))
+            self.depth += 1
+
+        self.submarine_location = problem.submarine_location
+        return self
+class GeneticSolution:
+    """Solution
+
+    """
+
+    def __init__(self):
+        self.processes: list = []
+
+    def __iadd__(self, formula: DynamicFormula):
+        """
+
+        :param parameters:
+        :return:
+        """
+        chosen_chromosome = get_genetic_result(formula.submarine_location, formula.cost, formula.depth, 1)[0]
+        self.processes = []
+        for gene_is_active, position in zip(chosen_chromosome, range(0, chromosome_size)):
+            if gene_is_active:
+                self.processes += [Probe(10, 3, [position])]
+
+        return self
+
+def domain():
+    """
+
+    :return:
+    """
+    return IntervalExpression(
+        intervals=[Interval(
             left=LeftEndpoint(0, False, True),
             right=RightEndpoint(100, False, True)
-        )
-    }
-    time = 1
-    genetic = generator(state, cost, time)
+        )]
+    )
 
-    gen = dynamic(100, state, cost, genetic, time)
+def ship(ship_location, submarine_location, computation_rate):
+    """
+    :param ship_location:
+    :param submarine_location:
+    :param computation_rate:
 
-    for _ in gen:
-        print(cost)
+    """
+    problem = ByzantineProblem(
+        ship_location=ship_location,
+        submarine_location=submarine_location,
+        computation_rate=computation_rate
+    )
+    formula = DynamicFormula()
+    solution = GeneticSolution()
+
+    while True:
+        yield str(problem)
+
+        formula += problem
+        solution += formula
+        problem += solution

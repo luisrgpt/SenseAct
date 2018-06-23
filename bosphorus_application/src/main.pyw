@@ -6,9 +6,19 @@ import automata
 import interface
 import generators
 import threading
+from intervals import LeftEndpoint, RightEndpoint, Interval, IntervalExpression
 
 
-ship = generators.generate_ship([0])
+ship = generators.ship(
+    ship_location=[],
+    submarine_location=IntervalExpression(
+        intervals=[Interval(
+            left=LeftEndpoint(0, False, True),
+            right=RightEndpoint(100, False, True)
+        )]
+    ),
+    computation_rate=100
+)
 
 
 def init_output():

@@ -21,19 +21,6 @@ mut_pb = 1
 n_gen = 5
 verbose = False
 
-
-def domain():
-    """
-
-    :return:
-    """
-    return IntervalExpression(
-        intervals=[Interval(
-            left=LeftEndpoint(0, False, True),
-            right=RightEndpoint(100, False, True)
-        )]
-    )
-
 def get_cost(time, comb, state, cost):
     probe_cost = 10
 
@@ -191,37 +178,37 @@ toolbox.register(
     tools.selWorst
 )
 
-def generator(state, cost, time):
+def get_genetic_result(state, cost, time, n_top):
     global toolbox
 
-    while True:
-        #print(state)
+    #print(state)
 
-        gene_pool = toolbox.gene_pool(
-            n=gene_pool_size
-        )
+    gene_pool = toolbox.gene_pool(
+        n=gene_pool_size
+    )
 
-        toolbox.register(
-            'evaluate',
-            eval_probes,
-            state=state,
-            cost=cost,
-            time=time
-        )
+    toolbox.register(
+        'evaluate',
+        eval_probes,
+        state=state,
+        cost=cost,
+        time=time
+    )
 
-        yield sorted(
-            algorithms.eaSimple(
-                population=gene_pool,
-                toolbox=toolbox,
-                cxpb=cx_pb,
-                mutpb=mut_pb,
-                ngen=n_gen,
-                verbose=verbose
-            )[0],
-            key=lambda g: eval_probes(g, state, cost, time)
-        )[:5]
+    return sorted(
+        algorithms.eaSimple(
+            population=gene_pool,
+            toolbox=toolbox,
+            cxpb=cx_pb,
+            mutpb=mut_pb,
+            ngen=n_gen,
+            verbose=verbose
+        )[0],
+        key=lambda g: eval_probes(g, state, cost, time)
+    )[:n_top]
 
 def test():
+    pass
     #print(eval_probes([0]*23 + [1] + [0]*14 + [1] + [0]*6 + [1] + [0]*55, domain()))
-    for xs in generator():
-        print(list(sorted([eval_probes(x) for x in xs])))
+    #xs = genetic_algorithm()
+    #list(sorted([eval_probes(x) for x in xs]))
