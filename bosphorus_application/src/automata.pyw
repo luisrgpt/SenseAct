@@ -1,25 +1,11 @@
 # coding=utf-8
-"""Automata
-
-"""
-
-
 class AutomatonException(Exception):
-    """Automaton exception
-
-    """
     pass
-
-
 class Automaton:
-    """Automaton
-
-    """
     def __init__(self, state_transitions: dict, state_outputs: dict):
         self.state_transitions = state_transitions
         self.state_outputs = state_outputs
         self.current_state = None
-
     def __iadd__(self, input_name: str):
         if input_name not in self.state_transitions:
             return

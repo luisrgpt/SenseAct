@@ -1,14 +1,8 @@
 # coding=utf-8
-"""Intervals
-
-"""
 import functools
 import time
 
 class Uncertainty:
-    """Uncertainty
-
-    """
     def __init__(self, center: float, absolute: float, relative: float):
         self.center: float = float(center)
         self.absolute: float = float(absolute)
@@ -50,18 +44,12 @@ class Uncertainty:
 
         return result
 class AbsoluteUncertainty(Uncertainty):
-    """Absolute uncertainty
-
-    """
     def __init__(self, center: float, absolute: float):
         relative = (absolute / center * 100) if center != 0 else 0
         super().__init__(center, absolute, relative)
     def __repr__(self):
         return str(self.center) + ' +- ' + str(self.absolute)
 class RelativeUncertainty(Uncertainty):
-    """Relative uncertainty
-
-    """
     def __init__(self, center: float, relative: float):
         absolute = relative * center / 100
         super().__init__(center, absolute, relative)
@@ -69,9 +57,6 @@ class RelativeUncertainty(Uncertainty):
         return str(self.center) + ' +- ' + str(self.relative) + '%'
 
 class Endpoint:
-    """Endpoint
-
-    """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         self.value: float = float(value)
         self.is_open: bool = is_open
@@ -92,12 +77,9 @@ class Endpoint:
         self.value -= other
         return self
 class LeftEndpoint(Endpoint):
-    """Left endpoint
-
-    """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
         return LeftEndpoint(self.value, self.is_open, self.is_closed)
 
     def __eq__(self, other):
@@ -130,12 +112,9 @@ class LeftEndpoint(Endpoint):
     def __repr__(self):
         return ('(' if self.is_open else '[') + ('LOW' if self.is_unbounded else str(self.value))
 class RightEndpoint(Endpoint):
-    """Right endpoint
-
-    """
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
         return RightEndpoint(self.value, self.is_open, self.is_closed)
 
     def __eq__(self, other):
@@ -169,9 +148,6 @@ class RightEndpoint(Endpoint):
         return ('HIGH' if self.is_unbounded else str(self.value)) + (')' if self.is_open else ']')
 
 class Interval:
-    """Interval
-
-    """
     def __init__(self, left: LeftEndpoint, right: RightEndpoint):
         self.left: LeftEndpoint = left
         self.right: RightEndpoint = right
@@ -181,7 +157,7 @@ class Interval:
         self.is_degenerated = self.is_bounded and self.is_closed and left.value == right.value
         self.is_proper = not self.is_bounded or left.value < right.value
         self.is_empty = not self.is_degenerated and not self.is_proper
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
         return Interval(
             left=self.left.__deepcopy__(),
             right=self.right.__deepcopy__()
@@ -193,69 +169,29 @@ class Interval:
 
     @classmethod
     def empty(cls):
-        """
-
-        :return:
-        """
         interval_left = LeftEndpoint(0, True, False)
         interval_right = RightEndpoint(0, True, False)
         return cls(interval_left, interval_right)
     @classmethod
     def domain(cls):
-        """
-
-        :return:
-        """
         interval_left = LeftEndpoint(0, True, True)
         interval_right = RightEndpoint(0, True, True)
         return cls(interval_left, interval_right)
     def is_not_closed(self) -> bool:
-        """
-
-        :return:
-        """
         return not self.is_closed
     def is_open(self) -> bool:
-        """
-
-        :return:
-        """
         return self.left.is_open and self.right.is_open
     def is_half_open(self) -> bool:
-        """
-
-        :return:
-        """
         return self.left.is_open != self.right.is_open and self.left.is_closed != self.right.is_closed
     def is_half_bounded(self) -> bool:
-        """
-
-        :return:
-        """
         return self.left.is_bounded != self.right.is_bounded
     def is_not_bounded(self) -> bool:
-        """
-
-        :return:
-        """
         return not self.is_bounded
     def is_not_empty(self) -> bool:
-        """
-
-        :return:
-        """
         return not self.is_empty
     def is_infinitesimal(self) -> bool:
-        """
-
-        :return:
-        """
         return self.is_half_open() and self.left.value == self.right.value
     def is_not_infinitesimal(self) -> bool:
-        """
-
-        :return:
-        """
         return not self.is_infinitesimal()
 
     def range(self):
@@ -402,11 +338,7 @@ class Interval:
         result = self.__deepcopy__()
         result |= other
         return result
-
 class IntervalExpression:
-    """Interval expression
-
-    """
     def __init__(self, intervals: list):
         self.intervals = [x for x in intervals if x.is_not_empty()]
         self.intervals.sort()
@@ -416,29 +348,15 @@ class IntervalExpression:
         return self.intervals.__getitem__(item)
     def __len__(self):
         return self.intervals.__len__()
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self, memodict=None):
         return IntervalExpression(
             intervals=[x.__deepcopy__() for x in self]
         )
 
     @classmethod
-    def empty(cls):
-        """
-
-        :return:
-        """
-        return cls([])
-    @classmethod
     def domain(cls):
-        """
-
-        :return:
-        """
         return cls([Interval.domain()])
     def sort(self):
-        """Sort
-
-        """
         self.intervals.sort()
         for fst, snd in zip(self.intervals[1:], self.intervals[:-1]):
             fst |= snd
@@ -466,7 +384,7 @@ class IntervalExpression:
                 self.intervals,
                 ''
             )
-            if self != IntervalExpression.empty()
+            if len(self) > 0
             else
             '()'
         )
@@ -500,6 +418,7 @@ class IntervalExpression:
         self.sort()
 
         return self
+    # noinspection PyMethodFirstArgAssignment
     def __iand__(self, other):
         # print('')
         # print('Intersection:')
@@ -548,9 +467,6 @@ class IntervalExpression:
         return result
 
 def test():
-    """Test
-
-    """
     for x in Interval(
         left=LeftEndpoint(0, False, True),
         right=RightEndpoint(10, False, True)
@@ -588,7 +504,7 @@ def test():
     i11 = IntervalExpression([Interval(l6, r1)])  # (1..HIGH)
     i12 = IntervalExpression([Interval(l2, r7)])  # [0..5]
 
-    e0 = IntervalExpression.empty()  # ()
+    e0 = IntervalExpression([])  # ()
     e1 = IntervalExpression.domain()  # (LOW..HIGH)
 
     print(str(i7 | i11))

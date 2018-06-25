@@ -1,30 +1,23 @@
 # coding=utf-8
-"""Genetic
-
-"""
-from deap import algorithms, base, creator, tools
 from intervals import AbsoluteUncertainty, Interval, IntervalExpression, LeftEndpoint, RightEndpoint
-import random
+from random import random
 
-
-# Start parameters
-gene_pool_size = 10
-chromosome_size = 101
-percentage = 1
-# Mutate parameters
-mut_parameter = 1
-# Select parameters
-# k = 10
-# Algorithm parameters
-cx_pb = 0.5
-mut_pb = 1
+n_genes = 1001
+n_pool = 10
 n_gen = 5
-verbose = False
+max_flips = 1
+pb_gen = 0.01
+pb_mate = 0.5
+not_pb_mutate = 0.9
 
-def get_cost(time, comb, state, cost):
+def evaluate(comb, state, cost, time):
     probe_cost = 10
-
     answers = [index for index, x in enumerate(comb) if x]
+
+    # When there is an unacceptable amount of probes
+    if len(answers) > 4:
+        return 9000.0
+
     yes_intervals = [
         Interval(
             left=LeftEndpoint(x - 3, False, True),
@@ -46,43 +39,8 @@ def get_cost(time, comb, state, cost):
         for x in no_space
     )
 
-    return deploy_cost + yes_cost + no_cost
-
-# Custom genetic algorithms
-def gen_gene(to_true_gen_pb: int):
-    """
-
-    :type to_true_gen_pb: int
-    :param to_true_gen_pb:
-    :return:
-    """
-    return random.randint(1, 100) <= to_true_gen_pb
-def eval_probes(chromosome: list, state, cost, time):
-    """
-
-    :type state: intervals.IntervalExpression
-    :param state:
-    :type chromosome: list
-    :param chromosome:
-    :return:
-    """
-    # current = time.time()
-    # Get all genes from chromosome
-    genes = [index for index, value in enumerate(chromosome) if value]
-
-    # When there is an unacceptable amount of probes
-    if len(genes) > 4:
-        return 9000.0,
-
-    return get_cost(time, chromosome, state, cost),
-def cx_biased_one_point(chromosome_1: list, chromosome_2: list):
-    """
-
-    :type chromosome_1: list
-    :param chromosome_1:
-    :param chromosome_2:
-    :return:
-    """
+    return (deploy_cost + yes_cost + no_cost),
+def mate(chromosome_1: list, chromosome_2: list):
     # Check if both chromosomes are identical
     if chromosome_1 == chromosome_2:
         return chromosome_1, chromosome_2
@@ -107,20 +65,13 @@ def cx_biased_one_point(chromosome_1: list, chromosome_2: list):
     chromosome_1[cx_point:], chromosome_2[cx_point:] = chromosome_2[cx_point:], chromosome_1[cx_point:]
 
     return chromosome_1, chromosome_2
-def mut_biased_flip_bit(chromosome: list, max_number_of_flips: int):
-    """
+def mutate(chromosome: list, max_flips: int):
+    n_flips = random.randint(-max_flips, max_flips)
 
-    :type chromosome: list
-    :param max_number_of_flips:
-    :param chromosome:
-    :return:
-    """
-    number_of_flips = random.randint(-max_number_of_flips, max_number_of_flips)
-
-    flip_signal = number_of_flips > 0
+    flip_signal = n_flips > 0
 
     # for each number of flips
-    for x in range(abs(number_of_flips)):
+    for x in range(abs(n_flips)):
         # break loop if all genes are flipped
         if all(y == flip_signal for y in chromosome):
             break
@@ -132,83 +83,20 @@ def mut_biased_flip_bit(chromosome: list, max_number_of_flips: int):
         # flip value
         chromosome[y] = type(chromosome[y])(not chromosome[y])
 
-    return chromosome,
-
-creator.create(
-    'FitnessMax',
-    base.Fitness,
-    weights=(1.0,)
-)
-creator.create(
-    'Chromosome',
-    list,
-    fitness=creator.FitnessMax
-)
-
-toolbox = base.Toolbox()
-toolbox.register(
-    'gene',
-    gen_gene,
-    to_true_gen_pb=percentage
-)
-toolbox.register(
-    'chromosome',
-    tools.initRepeat,
-    creator.Chromosome,
-    toolbox.gene,
-    n=chromosome_size
-)
-toolbox.register(
-    'gene_pool',
-    tools.initRepeat,
-    list,
-    toolbox.chromosome
-)
-toolbox.register(
-    'mate',
-    cx_biased_one_point
-)
-toolbox.register(
-    'mutate',
-    mut_biased_flip_bit,
-    max_number_of_flips=mut_parameter
-)
-toolbox.register(
-    'select',
-    tools.selWorst
-)
-
-def get_genetic_result(state, cost, time, n_top):
-    global toolbox
-
-    #print(state)
-
-    gene_pool = toolbox.gene_pool(
-        n=gene_pool_size
-    )
-
-    toolbox.register(
-        'evaluate',
-        eval_probes,
-        state=state,
-        cost=cost,
-        time=time
-    )
-
-    return sorted(
-        algorithms.eaSimple(
-            population=gene_pool,
-            toolbox=toolbox,
-            cxpb=cx_pb,
-            mutpb=mut_pb,
-            ngen=n_gen,
-            verbose=verbose
-        )[0],
-        key=lambda g: eval_probes(g, state, cost, time)
-    )[:n_top]
-
-def test():
-    pass
-    #print(eval_probes([0]*23 + [1] + [0]*14 + [1] + [0]*6 + [1] + [0]*55, domain()))
-    #xs = genetic_algorithm()
-    #list(sorted([eval_probes(x) for x in xs]))
+    return chromosome
+def search(state, cost, time, n_tops):
+    # Generate and evaluate
+    pool = [[random() < pb_gen for _ in range(n_genes)] for _ in range(n_pool)]
+    fitness = [evaluate(x, state, cost, time) for x in pool]
+    prob = [random() for _ in pool]
+    for _ in range(n_gen):
+        # Mate, mutate and evaluate
+        pool += [x for even, odd, pb in zip(pool[::2], pool[1::2], prob) if pb < pb_mate for x in mate(even, odd)]
+        pool += [mutate(x, max_flips) for x, pb in zip(pool, prob) if not_pb_mutate <= pb]
+        fitness += [evaluate(x, state, cost, time) for x in pool[n_pool:]]
+        # Select
+        pool = [x for _, x in sorted(zip(fitness, pool))][:n_pool]
+        fitness = [x for x in sorted(fitness)][:n_pool]
+        prob = [random() for _ in pool]
+    # Return top N
+    return pool[:n_tops]

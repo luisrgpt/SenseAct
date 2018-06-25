@@ -1,79 +1,38 @@
 # coding=utf-8
-"""Generators
-
-"""
 import csv
-from genetic import chromosome_size, get_genetic_result
 from graphs import Graph, Node, Hyperedge
 from intervals import AbsoluteUncertainty, Uncertainty, Interval, IntervalExpression, LeftEndpoint, RightEndpoint
 import math
 import random
-import time
+from time import strftime
 from itertools import chain
-from genetic import get_cost, get_genetic_result
-from time import sleep
+import genetic
 
-class Alert:
-    """Alert
-
-    """
-
-    def __init__(self, interval, cost, message):
-        self.interval = interval
-        self.cost = cost
-        self.message = message
-
-    @staticmethod
-    def trigger():
-        """
-        :rtype: object
-
-        """
-        # StateMachine.receive(win_input)
-        # sys.exit(0)
-
-    def __repr__(self):
-        return self.interval
-class RedAlert(Alert):
-    """Red alert
-
-    """
-    interval_expression = IntervalExpression([Interval(
-        left=LeftEndpoint(40, False, True),
-        right=RightEndpoint(45, False, True)
-    )])
-    cost = 1000
-    message = 'RED ALERT!!!'
-
-    def __init__(self):
-        super().__init__(
-            interval=RedAlert.interval_expression,
-            cost=RedAlert.cost,
-            message=RedAlert.message
-        )
-class YellowAlert(Alert):
-    """Yellow alert
-
-    """
-    interval_expression = IntervalExpression([Interval(
-        left=LeftEndpoint(45, True, False),
-        right=RightEndpoint(70, False, True)
-    )])
-    cost = 50
-    message = 'Yellow alert!'
-
-    def __init__(self):
-        super().__init__(
-            interval=YellowAlert.interval_expression,
-            cost=YellowAlert.cost,
-            message=YellowAlert.message
-        )
-
+domain = IntervalExpression([Interval(
+    left=LeftEndpoint(0, False, True),
+    right=RightEndpoint(100, False, True)
+)])
+red_alert_interval = IntervalExpression([Interval(
+    left=LeftEndpoint(40, False, True),
+    right=RightEndpoint(45, False, True)
+)])
+yellow_alert_interval = IntervalExpression([Interval(
+    left=LeftEndpoint(45, True, False),
+    right=RightEndpoint(70, False, True)
+)])
+red_alert_cost = 1000
+yellow_alert_cost = 50
+def get_alarm_cost(location):
+    return (
+        red_alert_cost
+        if len(location & red_alert_interval) > 0
+        else
+        yellow_alert_cost
+        if len(location & yellow_alert_interval) > 0
+        else
+        0
+    )
 def generate_submarine(location):
-    """
-    :rtype: object
-
-    """
     timestamp = 0
     while True:
         yield location, timestamp
@@ -89,9 +48,6 @@ def generate_submarine(location):
         timestamp += 1
 
 class Probe:
-    """Probe
-
-    """
     submarine_location = None
 
     def __init__(self, cost: int, precision: int, location: list):
@@ -104,10 +60,6 @@ class Probe:
         )])
 
     def synchronous_read(self):
-        """
-
-        :return:
-        """
         # Calculate measurements
         values = zip(self.location, Probe.submarine_location)
         distance = sum((x[0] - x[1]) ** 2 for x in values) ** 0.5
@@ -115,10 +67,6 @@ class Probe:
 
         return reply
 class Measurement:
-    """Measurement
-
-    """
-
     def __init__(self, label, location, precision, cost, has_detected_submarine, value: list, is_lying: bool):
         self.label: int = label
         self.location = location
@@ -142,17 +90,13 @@ class Measurement:
 
     def __iadd__(self, uncertainty: Uncertainty):
         self.value += uncertainty
-        self.value &= domain()
+        self.value &= domain
         return self
     def __add__(self, uncertainty: Uncertainty):
         result = self.__deepcopy__()
         result += uncertainty
         return result
 class Batch:
-    """Batch
-
-    """
-
     def __init__(self, label: int, timestamp: int, measurements: list):
         self.label: int = label
         self.timestamp: int = timestamp
@@ -170,7 +114,7 @@ class Batch:
 
     def __iadd__(self, uncertainty: Uncertainty):
         self.measurements = [x + uncertainty for x in self]
-        self.measurements = [x for x in self if x.value in domain() and not x.value == domain()]
+        self.measurements = [x for x in self if x.value in domain and not x.value == domain]
         self.decay += uncertainty.absolute
         return self
     def __add__(self, uncertainty: Uncertainty):
@@ -179,10 +123,6 @@ class Batch:
         return result
 
 class ByzantineProblem:
-    """Ship state
-
-    """
-
     def __init__(self, ship_location, submarine_location, computation_rate):
         self.location = ship_location
         self.timestamp = 0
@@ -201,7 +141,7 @@ class ByzantineProblem:
     def __repr__(self):
         # Create log
         # Ship
-        csv_content = [time.strftime('%Y_%m_%d_%H_%M_%S')]
+        csv_content = [strftime('%Y_%m_%d_%H_%M_%S')]
         csv_content += [self.location]
         csv_content += [self.timestamp]
         csv_content += [self.total_cost]
@@ -237,11 +177,6 @@ class ByzantineProblem:
         return stream.getvalue()
 
     def __iadd__(self, solution):
-        """
-
-        :param solution:
-        :return:
-        """
         self.timestamp += 1
         Probe.submarine_location, _ = next(self.submarine)
 
@@ -249,7 +184,7 @@ class ByzantineProblem:
         sources = self.submarine_location
         targets = self.submarine_location.__deepcopy__()
         targets += AbsoluteUncertainty(0, 1)
-        targets &= domain()
+        targets &= domain
         self.batches = [x + AbsoluteUncertainty(0, 1) for x in self.batches]
         self.batches = [x for x in self.batches if len(x) > 0]
         for target in targets:
@@ -273,7 +208,7 @@ class ByzantineProblem:
             if reply == 'True':
                 value = probe.interval
             else:
-                value = ~probe.interval & domain()
+                value = ~probe.interval & domain
 
             measurements += [Measurement(
                 label=self.probe_counter,
@@ -311,102 +246,43 @@ class ByzantineProblem:
                 )
             self.submarine_location.intervals = targets.intervals
 
-        self.total_cost += (
-            RedAlert.cost
-            if (self.submarine_location & RedAlert.interval_expression) != Interval.empty()
-            else
-            YellowAlert.cost
-            if (self.submarine_location & YellowAlert.interval_expression) != Interval.empty()
-            else
-            0
-        )
+        self.total_cost += get_alarm_cost(self.submarine_location)
 
         return self
 class DynamicFormula:
-    """Formula
-
-    """
-
     def __init__(self):
         self.submarine_location = None
-        self.cost = {
-            str((0, x)): {
-                "": (
-                    RedAlert.cost
-                    if (x & RedAlert.interval_expression[0]) != Interval.empty()
-                    else
-                    YellowAlert.cost
-                    if (x & YellowAlert.interval_expression[0]) != Interval.empty()
-                    else
-                    0
-                )
-            } for x in Interval(
-                left=LeftEndpoint(0, False, True),
-                right=RightEndpoint(100, False, True)
-            )
-        }
-        self.depth = 0
+        self.cost = {str((0, x)): {"": get_alarm_cost(x)} for x in domain}
+        self.depth = 1
     def __iadd__(self, problem: ByzantineProblem):
-        """
-
-        :param problem:
-        :return:
-        """
         print(problem.submarine_location)
         for time in range(1, problem.computation_rate):
             for sub_interval in zip(chain.from_iterable(problem.submarine_location)):
-                top5 = get_genetic_result(problem.submarine_location, self.cost, self.depth, 5)
+                top5 = genetic.search(problem.submarine_location, self.cost, self.depth, 5)
                 self.cost[str((time, sub_interval))] = {
-                    str(x): get_cost(time, sub_interval, problem.submarine_location, self.cost)
+                    str(x): genetic.evaluate(sub_interval, problem.submarine_location, self.cost, time)
                     for x in top5
                 }
 
-                # print(str((t, x)) + ": " + str(list(cost[str((t, x))].values())))
+                print(str((time, sub_interval)) + ": " + str(list(self.cost[str((time, sub_interval))].values())))
             self.depth += 1
 
         self.submarine_location = problem.submarine_location
         return self
 class GeneticSolution:
-    """Solution
-
-    """
-
     def __init__(self):
         self.processes: list = []
 
     def __iadd__(self, formula: DynamicFormula):
-        """
-
-        :param parameters:
-        :return:
-        """
-        chosen_chromosome = get_genetic_result(formula.submarine_location, formula.cost, formula.depth, 1)[0]
+        chosen_chromosome = genetic.search(formula.submarine_location, formula.cost, formula.depth, 1)[0]
         self.processes = []
-        for gene_is_active, position in zip(chosen_chromosome, range(0, chromosome_size)):
+        for gene_is_active, position in enumerate(chosen_chromosome):
             if gene_is_active:
                 self.processes += [Probe(10, 3, [position])]
 
         return self
 
-def domain():
-    """
-
-    :return:
-    """
-    return IntervalExpression(
-        intervals=[Interval(
-            left=LeftEndpoint(0, False, True),
-            right=RightEndpoint(100, False, True)
-        )]
-    )
-
 def ship(ship_location, submarine_location, computation_rate):
-    """
-    :param ship_location:
-    :param submarine_location:
-    :param computation_rate:
-
-    """
     problem = ByzantineProblem(
         ship_location=ship_location,
         submarine_location=submarine_location,

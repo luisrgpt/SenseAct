@@ -1,13 +1,4 @@
 # coding=utf-8
-"""Graphs
-
-"""
-
-import graphviz
-# from intervals import LeftEndpoint, RightEndpoint, Interval, IntervalExpression
-import os
-import time
-
 # Properties:
 # - #############Acyclic
 # - Connected
@@ -15,77 +6,44 @@ import time
 # - Finite (by 'reductio ad absurdum')
 # - Vertex-transitive
 # - Weighted
-
+import graphviz
+import os
+import time
 
 class CyclicGraphException(Exception):
-    """Cyclic graph exception
-
-    """
     pass
-
-
 class DisconnectedGraphException(Exception):
-    """Disconnected graph exception
-
-    """
     pass
-
-# class Edge:
-#    def __init__(self, target: str, weight: int, label: str):
-#        self.target: str = target # Directed
-#        self.weight: int = weight # Weighted
-#        self.label: str = label   # Vertex-transitive
-
 
 class Hyperedge:
-    """Hyperedge
-
-    """
     def __init__(self, sources: list, targets: list, weight: int, label: str):
         self.sources: list = sources
         self.targets: list = targets  # Directed
         self.weight: int = weight     # Weighted
         self.label: str = label       # Vertex-transitive
-
     def __iter__(self):
         return self.targets.__iter__()
-
     def __getitem__(self, key):
         return self.targets.__getitem__(key)
-
 class Node:
-    """Node
-
-    """
     def __init__(self, label):
         self.label = label
         self.edges: dict = {}
-
     def __iter__(self):
         return self.edges.__iter__()
-
     def __getitem__(self, key):
         return self.edges.__getitem__(key)
-
     def __setitem__(self, key, value):
         return self.edges.__setitem__(key, value)
-
 class Graph:
-    """Graph
-
-    """
     def __init__(self, node: Node):
         self.nodes: dict = {str(node.label): node}
-
     def __iter__(self):
         return self.nodes.__iter__()
-
     def __getitem__(self, key):
         return self.nodes.__getitem__(key)
-
     def __contains__(self, node: Node):
         return str(node) in self.nodes
-
     def __iadd__(self, hyperedge: Hyperedge):
         # Connected Graph => ANY node in graph points to new node
         # Therefore: EVERY node in graph does NOT point to new node => Disconnected Graph => raise exception
@@ -112,11 +70,6 @@ class Graph:
         return self
 
     def save_into_disk_and_get_file_name(self, directory: str):
-        """
-
-        :param directory:
-        :return:
-        """
         dot = graphviz.Graph(
             filename=str(time.strftime('%Y_%m_%d_%H_%M_%S')),
             directory=directory,
@@ -137,7 +90,6 @@ class Graph:
         dot.render()
 
         return os.path.abspath(dot.directory + '/' + dot.filename + '.' + dot.format)
-
 
 # def test():
 #     l0 = LeftEndpoint(-1, True, True)  # (LOW
