@@ -1,6 +1,5 @@
 # coding=utf-8
 import asyncio
-import threading
 
 class Protocol(asyncio.Protocol):
     transport = None
@@ -9,7 +8,7 @@ class Protocol(asyncio.Protocol):
         Protocol.transport = transport
     def data_received(self, data):
         Handler.app += data.decode('utf8')
-class Handler(threading.Thread):
+class Handler():
     app = None
 
     def __init__(self, app):
@@ -26,7 +25,7 @@ class Handler(threading.Thread):
 
         return self
 
-    def run(self):
+    def start(self):
         # loop = asyncio.new_event_loop()
         # asyncio.set_event_loop(loop)
         loop = asyncio.new_event_loop()

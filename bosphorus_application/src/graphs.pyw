@@ -44,7 +44,7 @@ class Graph:
         return self.nodes.__getitem__(key)
     def __contains__(self, node: Node):
         return str(node) in self.nodes
-    def __iadd__(self, hyperedge: Hyperedge):
+    def __iadd__(self, hyperedges):
         # Connected Graph => ANY node in graph points to new node
         # Therefore: EVERY node in graph does NOT point to new node => Disconnected Graph => raise exception
         # if not len(self.nodes) == 0 and not any(str(new_node.id) in node.edges for node in self.nodes.values()):
@@ -60,12 +60,13 @@ class Graph:
         #        #raise CyclicGraphException('Node ' + str(new_node.id) + ' has formed a cycle')
         #    edges = dict(reduce(lambda acc, edge: {**acc, **self.nodes[edge.direction].edges}, edges))
 
-        new_nodes = {str(x): Node(x) for x in hyperedge if x not in self}
-        self.nodes = {**self.nodes, **new_nodes}
+        for hyperedge in hyperedges:
+            new_nodes = {str(x): Node(x) for x in hyperedge if x not in self}
+            self.nodes = {**self.nodes, **new_nodes}
 
-        for source in hyperedge.sources:
-            # Add hyperedge into source
-            self[str(source)][hyperedge.label] = hyperedge
+            for source in hyperedge.sources:
+                # Add hyperedge into source
+                self[str(source)][hyperedge.label] = hyperedge
 
         return self
 

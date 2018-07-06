@@ -1,6 +1,5 @@
 # coding=utf-8
 import functools
-import time
 
 class Uncertainty:
     def __init__(self, center: float, absolute: float, relative: float):
@@ -58,15 +57,18 @@ class RelativeUncertainty(Uncertainty):
 
 class Endpoint:
     def __init__(self, value: float, is_open: bool, is_closed: bool):
-        self.value: float = float(value)
+        self.value: float = float(value) if is_open != is_closed else None
         self.is_open: bool = is_open
         self.is_closed: bool = is_closed
-        self.is_unbounded: bool = is_open == is_closed
-        self.is_bounded: bool = is_open != is_closed
+
+    def is_bounded(self):
+        return self.is_open != self.is_closed
+    def is_unbounded(self):
+        return self.is_open == self.is_closed
 
     def __eq__(self, other):
         return (self.value == other.value and self.is_open == other.is_open) or (
-                    self.is_unbounded and other.is_unbounded)
+                    self.is_unbounded() and other.is_unbounded())
     def __ne__(self, other):
         return not self.__eq__(other)
 
@@ -79,16 +81,13 @@ class Endpoint:
 class LeftEndpoint(Endpoint):
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
-    def __deepcopy__(self, memodict=None):
-        return LeftEndpoint(self.value, self.is_open, self.is_closed)
-
     def __eq__(self, other):
         return super().__eq__(other)
     def __ne__(self, other):
         return super().__ne__(other)
     def __ge__(self, other):
-        return other.is_unbounded \
-               or self.is_bounded \
+        return other.is_unbounded() \
+               or self.is_bounded() \
                and self.value >= other.value \
                and (self.value != other.value
                     or self.is_open
@@ -101,29 +100,26 @@ class LeftEndpoint(Endpoint):
         return not self.__ge__(other)
 
     def __add__(self, other: float):
-        result = self.__deepcopy__()
+        result = LeftEndpoint(self.value, self.is_open, self.is_closed)
         result += other
         return result
     def __sub__(self, other: float):
-        result = self.__deepcopy__()
+        result = LeftEndpoint(self.value, self.is_open, self.is_closed)
         result -= other
         return result
 
     def __repr__(self):
-        return ('(' if self.is_open else '[') + ('LOW' if self.is_unbounded else str(self.value))
+        return ('(' if self.is_open else '[') + ('LOW' if self.is_unbounded() else str(self.value))
 class RightEndpoint(Endpoint):
     def __init__(self, value: float, is_open: bool, is_closed: bool):
         super().__init__(value, is_open, is_closed)
-    def __deepcopy__(self, memodict=None):
-        return RightEndpoint(self.value, self.is_open, self.is_closed)
-
     def __eq__(self, other):
         return super().__eq__(other)
     def __ne__(self, other):
         return super().__ne__(other)
     def __le__(self, other):
-        return other.is_unbounded \
-               or self.is_bounded \
+        return other.is_unbounded() \
+               or self.is_bounded() \
                and self.value <= other.value \
                and (self.value != other.value
                     or self.is_open
@@ -136,36 +132,21 @@ class RightEndpoint(Endpoint):
         return not self.__le__(other)
 
     def __add__(self, other: float):
-        result = self.__deepcopy__()
+        result = RightEndpoint(self.value, self.is_open, self.is_closed)
         result += other
         return result
     def __sub__(self, other: float):
-        result = self.__deepcopy__()
+        result = RightEndpoint(self.value, self.is_open, self.is_closed)
         result -= other
         return result
 
     def __repr__(self):
-        return ('HIGH' if self.is_unbounded else str(self.value)) + (')' if self.is_open else ']')
+        return ('HIGH' if self.is_unbounded() else str(self.value)) + (')' if self.is_open else ']')
 
 class Interval:
     def __init__(self, left: LeftEndpoint, right: RightEndpoint):
         self.left: LeftEndpoint = left
         self.right: RightEndpoint = right
-        self.is_bounded = left.is_bounded and right.is_bounded
-        self.is_unbounded = left.is_unbounded and right.is_unbounded
-        self.is_closed = left.is_closed and right.is_closed
-        self.is_degenerated = self.is_bounded and self.is_closed and left.value == right.value
-        self.is_proper = not self.is_bounded or left.value < right.value
-        self.is_empty = not self.is_degenerated and not self.is_proper
-    def __deepcopy__(self, memodict=None):
-        return Interval(
-            left=self.left.__deepcopy__(),
-            right=self.right.__deepcopy__()
-        )
-    def __iter__(self):
-        return self.range()
-    def __len__(self):
-        return int(self.right.value - self.left.value) if self.is_bounded else None
 
     @classmethod
     def empty(cls):
@@ -177,80 +158,88 @@ class Interval:
         interval_left = LeftEndpoint(0, True, True)
         interval_right = RightEndpoint(0, True, True)
         return cls(interval_left, interval_right)
-    def is_not_closed(self) -> bool:
-        return not self.is_closed
-    def is_open(self) -> bool:
+
+    def is_unbounded(self):
+        return self.left.is_unbounded() and self.right.is_unbounded()
+    def is_bounded(self):
+        return self.left.is_bounded() and self.right.is_bounded()
+    def is_closed(self):
+        return self.left.is_closed and self.right.is_closed
+    def is_open(self):
         return self.left.is_open and self.right.is_open
-    def is_half_open(self) -> bool:
+    def is_degenerated(self):
+        return self.is_bounded() and self.is_closed() and self.left.value == self.right.value
+    def is_half_open(self):
         return self.left.is_open != self.right.is_open and self.left.is_closed != self.right.is_closed
-    def is_half_bounded(self) -> bool:
-        return self.left.is_bounded != self.right.is_bounded
-    def is_not_bounded(self) -> bool:
-        return not self.is_bounded
-    def is_not_empty(self) -> bool:
-        return not self.is_empty
-    def is_infinitesimal(self) -> bool:
+    def is_proper(self):
+        return not self.is_bounded() or self.left.value < self.right.value
+    def is_empty(self):
+        return not self.is_degenerated() and not self.is_proper()
+    def is_infinitesimal(self):
         return self.is_half_open() and self.left.value == self.right.value
-    def is_not_infinitesimal(self) -> bool:
-        return not self.is_infinitesimal()
 
     def range(self):
-        if self.is_empty or self.is_unbounded:
+        if self.is_empty() or self.is_unbounded():
             raise StopIteration()
 
-        left = self.left.__deepcopy__()
+        left = LeftEndpoint(self.left.value, self.left.is_open, self.left.is_closed)
         right = (
             RightEndpoint(self.left.value, False, True)
             if self.left.is_closed
             else
             RightEndpoint(self.left.value + 1, True, False)
         )
-        current = Interval(left, right)
-        while current.right <= self.right:
-            current = Interval(left, right)
-            yield current
-            if current.right < self.right:
-                if current.right.is_open:
-                    current.right.is_open = False
-                    current.right.is_closed = True
+        while right <= self.right:
+            yield Interval(left, right)
+            if right < self.right:
+                if right.is_open:
+                    right = RightEndpoint(right.value, False, True)
                 else:
-                    current.right += 1
-                    current.right.is_open = True
-                    current.right.is_closed = False
+                    right = RightEndpoint(right.value + 1, True, False)
             else:
-                if current.left.is_closed:
-                    current.left.is_open = True
-                    current.left.is_closed = False
-                    current.right.value = current.left.value + 1
-                    current.right.is_open = True
-                    current.right.is_closed = False
+                if left.is_closed:
+                    left = LeftEndpoint(left.value, True, False)
+                    right = RightEndpoint(left.value + 1, True, False)
                 else:
-                    current.left += 1
-                    current.left.is_open = False
-                    current.left.is_closed = True
-                    current.right.value = current.left.value
-                    current.right.is_open = False
-                    current.right.is_closed = True
+                    left = LeftEndpoint(left.value + 1, False, True)
+                    right = RightEndpoint(left.value, False, True)
         raise StopIteration()
 
+    def __iter__(self):
+        return self.range()
+    def __len__(self):
+        return int(self.right.value - self.left.value) if self.is_bounded() else None
     def __repr__(self):
-        if self.is_empty:
+        if self.is_empty():
             return '()'
-        elif self.is_degenerated:
+        elif self.is_degenerated():
             return '{' + str(self.left.value) + '}'
         else:
             return str(self.left) + '..' + str(self.right)
     def __contains__(self, other):
         # print(str(other) + " in " + str(self) + "?")
         # noinspection PyChainedComparisons
-        return self.is_not_empty() and other.is_not_empty() and self <= other and self >= other
+        if isinstance(other, int):
+            return (
+                not self.is_empty()
+                and (
+                    (self.left.is_closed and self.left.value <= other)
+                    or (self.left.is_open and self.left.value < other)
+                )
+                and (
+                    (self.right.is_closed and other <= self.right.value)
+                    or (self.right.is_open and other < self.right.value)
+                )
+            )
+        else:
+            return not self.is_empty() and not other.is_empty() and self <= other and self >= other
 
     def __lt__(self, other):
         return self.left < other.left
     def __gt__(self, other):
         return other.right < self.right
     def __eq__(self, other):
-        return self.left == other.left and self.right == other.right or self.is_empty and other.is_empty
+        return self.left == other.left and self.right == other.right or self.is_empty() and other.is_empty()
     def __le__(self, other):
         return self.left <= other.left or self.__eq__(other)
     def __ge__(self, other):
@@ -259,43 +248,47 @@ class Interval:
         return not self.__eq__(other)
 
     def __ior__(self, other):
-        gap = Interval(
-            left=max(self, other).left,
-            right=min(self, other).right
-        )
-
         # empty and not infinitesimal
-        if gap.is_empty and gap.is_not_infinitesimal():
-            return self, other
-        # proper or degenerated or infinitesimal
-        self.left = min(self.left, other.left)
-        self.right = max(self.right, other.right)
+        left = max(self, other).left
+        right = min(self, other).right
 
-        self.is_bounded = self.left.is_bounded and self.right.is_bounded
-        self.is_unbounded = self.left.is_unbounded and self.right.is_unbounded
-        self.is_closed = self.left.is_closed and self.right.is_closed
-        self.is_degenerated = self.is_bounded and self.is_closed and self.left.value == self.right.value
-        self.is_proper = not self.is_bounded or self.left.value < self.right.value
-        self.is_empty = not self.is_degenerated and not self.is_proper
+        if (
+            left.is_unbounded() or right.is_unbounded() or (
+                left.value <= right.value and (
+                    left.value != right.value or left.is_closed or right.is_closed
+                )
+            )
+        ):
+            # proper or degenerated or infinitesimal
+            if other.left < self.left:
+                self.left.value = other.left.value
+                self.left.is_open = other.left.is_open
+                self.left.is_closed = other.left.is_closed
+            if other.right > self.right:
+                self.right.value = other.right.value
+                self.right.is_open = other.right.is_open
+                self.right.is_closed = other.right.is_closed
 
         return self
     def __iand__(self, other):
-        gap = Interval(
-            left=max(self, other).left,
-            right=min(self, other).right
-        )
+        left = max(self, other).left
+        right = min(self, other).right
 
-        return (
-            # if empty
-            Interval.empty()
-            if gap.is_empty
-            else
-            # if proper or degenerated
-            Interval(
-                left=max(self.left, other.left),
-                right=min(self.right, other.right)
+        if left.is_unbounded() or right.is_unbounded() or (
+            left.value <= right.value and (
+                left.value != right.value or left.is_closed == right.is_closed
             )
-        )
+        ):
+            if other.left > self.left:
+                self.left.value = other.left.value
+                self.left.is_open = other.left.is_open
+                self.left.is_closed = other.left.is_closed
+            if other.right < self.right:
+                self.right.value = other.right.value
+                self.right.is_open = other.right.is_open
+                self.right.is_closed = other.right.is_closed
+
+        return self
     def __iadd__(self, other: Uncertainty):
         self_absolute = (self.right.value - self.left.value) / 2
         self_center = self.left.value + self_absolute
@@ -323,35 +316,47 @@ class Interval:
 
         return self
     def __add__(self, other: Uncertainty):
-        result = self.__deepcopy__()
+        result = Interval(
+            left=LeftEndpoint(self.left.value, self.left.is_open, self.left.is_closed),
+            right=RightEndpoint(self.right.value, self.right.is_open, self.right.is_closed)
+        )
         result += other
         return result
     def __sub__(self, other: Uncertainty):
-        result = self.__deepcopy__()
+        result = Interval(
+            left=LeftEndpoint(self.left.value, self.left.is_open, self.left.is_closed),
+            right=RightEndpoint(self.right.value, self.right.is_open, self.right.is_closed)
+        )
         result -= other
         return result
     def __and__(self, other):
-        result = self.__deepcopy__()
+        result = Interval(
+            left=LeftEndpoint(self.left.value, self.left.is_open, self.left.is_closed),
+            right=RightEndpoint(self.right.value, self.right.is_open, self.right.is_closed)
+        )
         result &= other
         return result
     def __or__(self, other):
-        result = self.__deepcopy__()
+        result = Interval(
+            left=LeftEndpoint(self.left.value, self.left.is_open, self.left.is_closed),
+            right=RightEndpoint(self.right.value, self.right.is_open, self.right.is_closed)
+        )
         result |= other
         return result
 class IntervalExpression:
     def __init__(self, intervals: list):
-        self.intervals = [x for x in intervals if x.is_not_empty()]
-        self.intervals.sort()
+        self.intervals = intervals#[x for x in intervals if not x.is_empty()]
+        #self.intervals.sort()
     def __iter__(self):
         return self.intervals.__iter__()
     def __getitem__(self, item):
         return self.intervals.__getitem__(item)
+    def __setitem__(self, key, value):
+        return self.intervals.__setitem__(key, value)
+    def __delitem__(self, key):
+        return self.intervals.__delitem__(key)
     def __len__(self):
         return self.intervals.__len__()
-    def __deepcopy__(self, memodict=None):
-        return IntervalExpression(
-            intervals=[x.__deepcopy__() for x in self]
-        )
 
     @classmethod
     def domain(cls):
@@ -360,15 +365,13 @@ class IntervalExpression:
         self.intervals.sort()
         for fst, snd in zip(self.intervals[1:], self.intervals[:-1]):
             fst |= snd
-            if isinstance(fst, Interval):
+            if snd in fst:
                 self.intervals.remove(snd)
-            else:
-                fst, _ = fst
 
     def __eq__(self, other):
-        if len(self.intervals) == 0:
-            return len(other.intervals) == 0
-        elif len(other.intervals) == 0:
+        if len(self.intervals) is 0:
+            return len(other.intervals) is 0
+        elif len(other.intervals) is 0:
             return False
         else:
             return all(x[0] == x[1] for x in zip(self, other))
@@ -389,80 +392,193 @@ class IntervalExpression:
             '()'
         )
 
-    def __invert__(self):
-        if len(self) == 0:
-            return IntervalExpression.domain()
-
-        acc = []
-        stack = None
-        self.sort()
-        for x in self:
-            if x.left.is_bounded:
-                if stack is not None:
-                    left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
-                else:
-                    left = LeftEndpoint(0, True, True)
-                right = RightEndpoint(x.left.value, x.left.is_closed, x.left.is_open)
-                acc += [Interval(left, right)]
-                stack = None
-            if x.right.is_bounded:
-                stack = x.right
-        if stack is not None:
-            left = LeftEndpoint(stack.value, stack.is_closed, stack.is_open)
-            right = RightEndpoint(0, True, True)
-            acc += [Interval(left, right)]
-
-        return IntervalExpression(acc)
+    def invert(self):
+        if len(self) is 0:
+            self.intervals += [
+                Interval(
+                    left=LeftEndpoint(0, True, True),
+                    right=RightEndpoint(0, True, True)
+                )
+            ]
+        elif self[0].left.is_bounded():
+            x = self[0]
+            # Save right endpoint
+            right_value = x.right.value
+            right_is_open = x.right.is_open
+            right_is_closed = x.right.is_closed
+            # Change right endpoint using left endpoint
+            x.right.value = x.left.value
+            x.right.is_open = x.left.is_closed
+            x.right.is_closed = x.left.is_open
+            # Change left endpoint using low endpoint
+            x.left.value = 0
+            x.left.is_open = True
+            x.left.is_closed = True
+            for x in self[1:]:
+                # Save left endpoint
+                left_value = x.left.value
+                left_is_open = x.left.is_open
+                left_is_closed = x.left.is_closed
+                # Change left endpoint using saved right endpoint
+                x.left.value = right_value
+                x.left.is_open = right_is_closed
+                x.left.is_closed = right_is_open
+                # Save right endpoint
+                right_value = x.right.value
+                right_is_open = x.right.is_open
+                right_is_closed = x.right.is_closed
+                # Change right endpoint using saved left endpoint
+                x.right.value = left_value
+                x.right.is_open = left_is_closed
+                x.right.is_closed = left_is_open
+            if right_is_open != right_is_closed:
+                # Add new interval with high endpoint if it does not already exist
+                self.intervals += [
+                    Interval(
+                        left=LeftEndpoint(
+                            value=right_value,
+                            is_open=right_is_closed,
+                            is_closed=right_is_open
+                        ),
+                        right=RightEndpoint(
+                            value=0,
+                            is_open=True,
+                            is_closed=True
+                        )
+                    )
+                ]
+        else:
+            x = self[-1]
+            if x.right.is_bounded():
+                # Save left endpoint
+                left_value = x.left.value
+                left_is_open = x.left.is_open
+                left_is_closed = x.left.is_closed
+                # Save right endpoint
+                x.left.value = x.right.value
+                x.left.is_open = x.right.is_closed
+                x.left.is_closed = x.right.is_open
+                # Change right endpoint using high endpoint
+                x.right.value = 0
+                x.right.is_open = True
+                x.right.is_closed = True
+                for x in reversed(self[:-1]):
+                    # Save right endpoint
+                    right_value = x.right.value
+                    right_is_open = x.right.is_open
+                    right_is_closed = x.right.is_closed
+                    # Change right endpoint using saved left endpoint
+                    x.right.value = left_value
+                    x.right.is_open = left_is_closed
+                    x.right.is_closed = left_is_open
+                    # Save left endpoint
+                    left_value = x.left.value
+                    left_is_open = x.left.is_open
+                    left_is_closed = x.left.is_closed
+                    # Change left endpoint using saved right endpoint
+                    x.left.value = right_value
+                    x.left.is_open = right_is_closed
+                    x.left.is_closed = right_is_open
+            else:
+                # Save left endpoint
+                left_value = x.left.value
+                left_is_open = x.left.is_open
+                left_is_closed = x.left.is_closed
+                del self[-1]
+                for x in reversed(self):
+                    # Save right endpoint
+                    right_value = x.right.value
+                    right_is_open = x.right.is_open
+                    right_is_closed = x.right.is_closed
+                    # Change right endpoint using saved left endpoint
+                    x.right.value = left_value
+                    x.right.is_open = left_is_closed
+                    x.right.is_closed = left_is_open
+                    # Save left endpoint
+                    left_value = x.left.value
+                    left_is_open = x.left.is_open
+                    left_is_closed = x.left.is_closed
+                    # Change left endpoint using saved right endpoint
+                    x.left.value = right_value
+                    x.left.is_open = right_is_closed
+                    x.left.is_closed = right_is_open
     def __ior__(self, other):
-        self.intervals += [x.__deepcopy__() for x in other]
+        self.intervals += [
+            Interval(
+                left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
+                right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
+            ) for x in other
+        ]
         self.sort()
-
         return self
-    # noinspection PyMethodFirstArgAssignment
     def __iand__(self, other):
-        # print('')
-        # print('Intersection:')
-        # print('(' + str(self) + ') and (' + str(other) + ')')
-        # print('not ' + str(self) + ' = ' + str(not_self))
-        # print('not ' + str(other) + ' = ' + str(not_other))
-        # print(str(not_self) + ' or ' + str(not_other) + ' = ' + str(not_result))
-        # print('not ' + str(not_result) + ' = ' + str(result))
-        # if result.intervals[-1].right.is_unbounded():
-        #    print('')
-        # else:
-        #    print('')
-        # print('')
-        # print('')
-
-        # Applying De Morgan's Laws
-        self.intervals = (~self).intervals
-        self |= ~other
-        self.intervals = (~self).intervals
+        self.intervals = [x & y for x in self for y in other]
+        self.intervals = [x for x in self if any(x in y for y in other)]
+        self.sort()
         return self
     def __iadd__(self, other: Uncertainty):
         for interval in self:
             interval += other
-        self.sort()
+        #self.sort()
         return self
     def __isub__(self, other: Uncertainty):
         for interval in self:
             interval -= other
-        self.sort()
+        #self.sort()
         return self
+    def __invert__(self):
+        result = IntervalExpression(
+            intervals=[
+                Interval(
+                    left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
+                    right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
+                ) for x in self
+            ]
+        )
+        result.invert()
+        return result
     def __add__(self, other: Uncertainty):
-        result = self.__deepcopy__()
+        result = IntervalExpression(
+            intervals=[
+                Interval(
+                    left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
+                    right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
+                ) for x in self
+            ]
+        )
         result += other
         return result
     def __sub__(self, other: Uncertainty):
-        result = self.__deepcopy__()
+        result = IntervalExpression(
+            intervals=[
+                Interval(
+                    left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
+                    right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
+                ) for x in self
+            ]
+        )
         result -= other
         return result
     def __and__(self, other):
-        result = self.__deepcopy__()
+        result = IntervalExpression(
+            intervals=[
+                Interval(
+                    left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
+                    right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
+                ) for x in self
+            ]
+        )
         result &= other
         return result
     def __or__(self, other):
-        result = self.__deepcopy__()
+        result = IntervalExpression(
+            intervals=[
+                Interval(
+                    left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
+                    right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
+                ) for x in self
+            ]
+        )
         result |= other
         return result
 
@@ -637,15 +753,10 @@ def test():
     print('not ' + str(i2) + ' = ' + str(~i2))
     print(str(e0) + ' and ' + str(i2) + ' = ' + str(e0 & i2))
     print(str(i1) + ' or ' + str(i2) + ' = ' + str(i1 | i2))
-    print(i2)
     print(str(i2) + ' or ' + str(i1) + ' = ' + str(i2 | i1))
-    print(i2)
     print(str(i1) + ' and ' + str(i2) + ' = ' + str(i1 & i2))
     print(str(i2) + ' and ' + str(i1) + ' = ' + str(i2 & i1))
     print('not ' + str(i7) + ' = ' + str(~i7))
     print(str(e1) + ' and ' + str(i7) + ' = ' + str(e1 & i7))
     print(str(e1) + ' in ' + str(i7) + ' = ' + str(e1 in i7))
     print(str(i7) + ' in ' + str(e1) + ' = ' + str(i7 in e1))
-
-    while True:
-        time.sleep(1000)

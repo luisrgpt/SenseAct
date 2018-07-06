@@ -2,19 +2,49 @@
 import automata
 import interface
 import generators
-import threading
 from intervals import LeftEndpoint, RightEndpoint, Interval, IntervalExpression
 
+#from intervals import test
+#from genetic import test
+#test()
+
+red_alert_interval = Interval(
+    left=LeftEndpoint(40, False, True),
+    right=RightEndpoint(45, False, True)
+)
+yellow_alert_interval = Interval(
+    left=LeftEndpoint(45, True, False),
+    right=RightEndpoint(70, False, True)
+)
+red_alert_cost = 1000
+yellow_alert_cost = 50
+
+
+def get_alarm_cost(location):
+    return (
+        red_alert_cost
+        if location & red_alert_interval in red_alert_interval
+        else
+        yellow_alert_cost
+        if location & yellow_alert_interval in yellow_alert_interval
+        else
+        0
+    )
 
 ship = generators.ship(
-    ship_location=[],
+    ship_location=0,
     submarine_location=IntervalExpression(
         intervals=[Interval(
             left=LeftEndpoint(0, False, True),
             right=RightEndpoint(100, False, True)
         )]
     ),
-    computation_rate=100
+    limit=Interval(
+        left=LeftEndpoint(0, False, True),
+        right=RightEndpoint(100, False, True)
+    ),
+    get_alarm_cost=get_alarm_cost,
+    computation_rate=5
 )
 
 
@@ -22,9 +52,6 @@ def init_output():
     print("init")
     global ui
     ui.start()
-    return 'wait_input'
-def ack_init_output():
-    print("ack init")
 def start_output():
     print("start")
     global ui
@@ -34,14 +61,19 @@ def start_play_output():
     global ui, ship
     del ship
     ship = generators.ship(
-        ship_location=[],
+        ship_location=0,
         submarine_location=IntervalExpression(
             intervals=[Interval(
                 left=LeftEndpoint(0, False, True),
                 right=RightEndpoint(100, False, True)
             )]
         ),
-        computation_rate=100
+        limit=Interval(
+            left=LeftEndpoint(0, False, True),
+            right=RightEndpoint(100, False, True)
+        ),
+        get_alarm_cost=get_alarm_cost,
+        computation_rate=5
     )
     ui += 'reset'
     return 'start_play_input'
@@ -55,17 +87,21 @@ def start_next_output():
     global ui, ship
     del ship
     ship = generators.ship(
-        ship_location=[],
+        ship_location=0,
         submarine_location=IntervalExpression(
             intervals=[Interval(
                 left=LeftEndpoint(0, False, True),
                 right=RightEndpoint(100, False, True)
             )]
         ),
-        computation_rate=100
+        limit=Interval(
+            left=LeftEndpoint(0, False, True),
+            right=RightEndpoint(100, False, True)
+        ),
+        get_alarm_cost=get_alarm_cost,
+        computation_rate=5
     )
     ui += 'reset', next(ship)
-    return 'wait_input'
 def ack_play_output():
     print("ack play")
 def ack_next_output():
@@ -101,8 +137,9 @@ def pause_output():
     global ui
     ui += 'previous', 'next', 'play', 'stop', 'repeat-all'
 def quit_output():
-    global exit_event
-    exit_event.set()
+    #global exit_event
+    #exit_event.set()
+    pass
 
 app = automata.Automaton(
     state_transitions={
@@ -115,15 +152,14 @@ app = automata.Automaton(
             'start_play_state': 'first_play_state'
         },
         'wait_input': {
-            'start_next_state': 'ack_next_state',
             'next_state': 'ack_next_state',
             'play_state': 'ack_play_state',
-            'init_state': 'ack_init_state',
         },
         'ack_input': {
+            'start_next_state': 'pause_state',
             'ack_next_state': 'pause_state',
             'ack_play_state': 'play_state',
-            'ack_init_state': 'start_state'
+            'init_state': 'start_state'
         },
         'next_input': {
             'start_state': 'start_next_state',
@@ -177,7 +213,6 @@ app = automata.Automaton(
         'first_play_state': first_play_output,
         'ack_play_state': ack_play_output,
         'ack_next_state': ack_next_output,
-        'ack_init_state': ack_init_output,
         'play_state': play_output,
         'next_state': next_output,
         'win_play_state': win_play_output,
@@ -189,14 +224,4 @@ app = automata.Automaton(
 )
 ui = interface.Handler(app)
 
-
-# graphs.test()
-# intervals.test()
-# generators.test()
-# genetic.test()
-# dynamic.test()
 app += 'init_input'
-
-
-exit_event = threading.Event()
-exit_event.wait()

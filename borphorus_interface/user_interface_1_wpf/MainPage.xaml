@@ -123,7 +123,7 @@
                                 <ListView>
                                     <TextBlock
                                         Style="{StaticResource Text}"
-                                        Text="Probe_ID      Batch_ID     Timestamp      Location    Precision      Decay          Cost        Submarine?        Result"/>
+                                        Text="Probe_ID      Batch_ID     Timestamp      Location   Imprecision     Decay          Cost        Submarine?        Result"/>
                                 </ListView>
                             </ListView>
                         </ListViewItem>
