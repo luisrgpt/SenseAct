@@ -1,251 +1,189 @@
 # coding=utf-8
-from intervals import AbsoluteUncertainty, Interval, IntervalExpression, LeftEndpoint, RightEndpoint
-from random import random, randint, randrange
+from intervals import AbsoluteUncertainty, Interval
+from random import random, randint, randrange, choice
 
-n_genes = 101
-m_pool = 50
-m_elite = 5
-n_gen = 10
+# Constants
 m_flips = 1
-pb_gen = 0.01
-pb_mate = 1
-not_pb_mutate = 1
+pb_neg = 0.7
 
 elites = {}
 
-def generate(expression):
+def generate(expression, limit, n_genes, pb_gen):
     return [
-        index in expression and random() < pb_gen
-        for index ,_ in enumerate(range(n_genes))
+        limit[0][0][0] + 3 <= x <= limit[0][1][0] - 3 and x in expression and random() < pb_gen
+        for x in range(n_genes)
     ]
 
-def evaluate(time, expression, comb, cost_table, limit: Interval, get_alarm_cost):
-    or_interval = IntervalExpression(
-        intervals=[
-            Interval(
-                left=LeftEndpoint(
-                    value=expression.left.value,
-                    is_open=expression.left.is_open,
-                    is_closed=expression.left.is_closed
-                ),
-                right=RightEndpoint(
-                    value=expression.right.value,
-                    is_open=expression.right.is_open,
-                    is_closed=expression.right.is_closed
-                )
-            )
-        ]
-        if isinstance(expression, Interval)
-        else
-        [
-            Interval(
-                left=LeftEndpoint(
-                    value=x.left.value,
-                    is_open=x.left.is_open,
-                    is_closed=x.left.is_closed
-                ),
-                right=RightEndpoint(
-                    value=x.right.value,
-                    is_open=x.right.is_open,
-                    is_closed=x.right.is_closed
-                )
-            )
-            for x in expression
-        ]
-    )
+def evaluate(time, expression, comb, cost_table, limit: Interval, alert_costs):
+    #length = len([x for x in comb if x])
+    #if length > 2:
+    #    print(length)
     minus_1 = time - 1
     decay_unit = AbsoluteUncertainty(0, 1)
-    n_interval = sum(len(x) for x in or_interval)
+    n_interval = expression.size()
+    n_comb = len(comb)
 
-    no = IntervalExpression(
-        intervals=[
-            Interval(
-                left=LeftEndpoint(
-                    value=x.left.value,
-                    is_open=x.left.is_open,
-                    is_closed=x.left.is_closed
-                ),
-                right=RightEndpoint(
-                    value=x.right.value,
-                    is_open=x.right.is_open,
-                    is_closed=x.right.is_closed
-                )
-            )
-            for x in or_interval
-        ]
-    )
+    no = Interval(expression[:])
     no_prob = 1
 
-    yes = IntervalExpression(
-        intervals = [
-            Interval(
-                left=LeftEndpoint(
-                    value=0,
-                    is_open=False,
-                    is_closed=True
-                ),
-                right=RightEndpoint(
-                    value=0,
-                    is_open=False,
-                    is_closed=True
-                )
-            )
-        ]
-    )
+    yes = Interval([((0, False), (0, True))])
 
-    cost = sum(10 for x in comb if x)
+    total_cost = sum(10 for x in comb if x)
+    x = Interval([])
     if n_interval is not 0:
         for i, positive in enumerate(comb):
             if not positive:
                 continue
-            left_value = max(
+            lower_offset = max(0, i - 6)
+            upper_offset = min(i + 1, n_comb)
+            upper_value = min(i + 6, n_comb)
+            lower_value = max(
                 [i - 3] +
-                [max(0, i - 6) + j + 3 for j, x in enumerate(comb[max(0, i - 6):i]) if x]
+                [
+                    lower_offset + j + 3
+                    for j, x in enumerate(comb[lower_offset:i])
+                    if x
+                ]
             )
-            right_values = (
-                [min(i + 1, len(comb)) + j - 3 for j, x in enumerate(comb[min(i + 1, len(comb)):min(i + 6, len(comb))]) if x] +
+            endpoints = (
+                [
+                    upper_offset + j - 3
+                    for j, x in enumerate(comb[upper_offset:upper_value])
+                    if x and upper_offset + j - 3 >= lower_value
+                ] +
                 [i + 3]
             )
-            if left_value != i - 3:
-                yes[0].left.is_open = True
-                yes[0].left.is_closed = False
-            for right_value in right_values:
-                yes[0].left.value = left_value
-                yes[0].right.value = right_value
-                if right_value == i + 3:
-                    yes[0].right.is_open = False
-                    yes[0].right.is_closed = True
-                else:
-                    yes[0].right.is_open = True
-                    yes[0].right.is_closed = False
-                yes &= or_interval
-                for x in yes:
-                    #print(x)
-                    yes_prob = len(x) / n_interval
-                    alarm_cost = get_alarm_cost(x)
-                    wait_cost = min(cost_table[str((minus_1, (x + decay_unit) & limit))].values())
-                    cost += yes_prob * (alarm_cost + wait_cost)
-                    no_prob -= yes_prob
-                no &= ~yes
-                left_value = right_value
-                yes[0].left.is_open = False
-                yes[0].left.is_closed = True
-    print(no)
-    alarm_cost = max(get_alarm_cost(x) for x in no)
-    wait_cost = sum(min(cost_table[str((minus_1, (x + decay_unit) & limit))].values()) for x in no)
-    cost += no_prob * (alarm_cost + wait_cost)
+            #print(str(lower_value) + ".." + str(upper_values))
+            yes[0] = ((lower_value, lower_value != i - 3), yes[0][1])
+            for endpoint in endpoints:
+                yes[0] = (yes[0][0], (endpoint, endpoint == i + 3))
+                if not(yes[0][0][0] == yes[0][1][0] and yes[0][0][1] and not yes[0][1][1]) and yes in expression:
+                    yes &= expression
+                    no &= ~yes
 
-    return cost
-def mate(chromosome_1: list, chromosome_2: list):
+                    for y in yes:
+                        x.intervals = [y]
+                        #print(x)
+                        yes_prob = x.size() / n_interval
+                        alert_cost = 0
+                        for alert_interval, cost in alert_costs:
+                            lower = (x[0] if alert_interval[0][1] <= x[0][1] else alert_interval[0])[0]
+                            upper = (x[0] if x[0][0] <= alert_interval[0][0] else alert_interval[0])[1]
+
+                            if lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1]):
+                                alert_cost = cost
+                        x += decay_unit
+                        x &= limit
+                        wait_cost = min(cost_table[str((minus_1, x))].values())
+                        total_cost += yes_prob * (alert_cost + wait_cost)
+                        no_prob -= yes_prob
+
+                    yes[0] = ((yes[0][0][0], False), yes[0][1])
+                    del yes[1:]
+                yes[0] = ((endpoint, yes[0][0][1]), yes[0][1])
+    alert_cost = 0
+    wait_cost = 0
+    #print(no)
+    for y in no:
+        x.intervals = [y]
+        for alert_interval, cost in alert_costs:
+            lower = (x[0] if alert_interval[0][1] <= x[0][1] else alert_interval[0])[0]
+            upper = (x[0] if x[0][0] <= alert_interval[0][0] else alert_interval[0])[1]
+
+            if alert_cost < cost and (
+                lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1])
+            ):
+                alert_cost = cost
+        x += decay_unit
+        x &= limit
+        wait_cost += min(cost_table[str((minus_1, x))].values())
+    total_cost += no_prob * (alert_cost + wait_cost)
+
+    return total_cost
+def mate(chromosome_1: list, chromosome_2: list, n_genes):
     chromosome_1 = [x for x in chromosome_1]
     chromosome_2 = [x for x in chromosome_2]
 
-    # Check if both chromosomes are identical
-    if chromosome_1 == chromosome_2:
-        return chromosome_1, chromosome_2
+    answers_1 = [index for index, x in enumerate(chromosome_1) if x]
+    answers_2 = [index for index, x in enumerate(chromosome_2) if x]
 
-    # Identify first difference
-    min_point = None
-    for min_point in range(len(chromosome_1)):
-        if chromosome_1[min_point] != chromosome_2[min_point]:
-            break
+    point_1 = choice(answers_1) if len(answers_1) > 0 else randrange(n_genes)
+    point_2 = choice(answers_2) if len(answers_2) > 0 else randrange(n_genes)
 
-    # Identify last difference
-    max_point = None
-    for max_point in range(len(chromosome_1) - 1, -1, -1):
-        if chromosome_1[max_point] != chromosome_2[max_point]:
-            break
-
-    # Check if both chromosomes differ at one and only one gene
-    if min_point == max_point:
-        return chromosome_1, chromosome_2
-
-    cx_point = randint(min_point, max_point)
-    chromosome_1[cx_point:], chromosome_2[cx_point:] = chromosome_2[cx_point:], chromosome_1[cx_point:]
+    chromosome_1[point_1], chromosome_2[point_2] = chromosome_2[point_2], chromosome_1[point_1]
 
     return chromosome_1, chromosome_2
-def mutate(chromosome: list, m_flips: int):
+def mutate(chromosome: list, n_genes):
     chromosome = [x for x in chromosome]
 
-    n_flips = randint(-m_flips, m_flips)
+    flip_signal = pb_neg < random()
+    n_yes = sum(1 for x in chromosome if x)
+    # Cannot flip bits to false if there are no true's
+    if n_yes is 0 and not flip_signal:
+        return chromosome
 
-    flip_signal = n_flips > 0
+    if n_yes >= 4 and flip_signal:
+        flip_signal = not flip_signal
 
-    # for each number of flips
-    for x in range(abs(n_flips)):
-        # break loop if all genes are flipped
-        if all(y == flip_signal for y in chromosome):
-            break
-
-        # repeat until gene is the opposite of its flip
-        y = randrange(len(chromosome))
-        while chromosome[y] == flip_signal:
-            y = randrange(len(chromosome))
-        # flip value
-        chromosome[y] = type(chromosome[y])(not chromosome[y])
+    # Assulowerg m_flips is always greater than 0
+    n_flips = randint(1, m_flips)
+    # For each number of flips
+    for _ in range(n_flips):
+        # Repeat until gene is the opposite of its flip
+        x = randrange(n_genes)
+        while chromosome[x] == flip_signal:
+            x = randrange(n_genes)
+        # Flip value
+        chromosome[x] = not chromosome[x]
 
     return chromosome
-def search(time, expression, cost_table, m_tops, limit: Interval, get_alarm_cost):
+def search(time, expression, cost_table, m_tops, limit: Interval, alert_costs):
     global elites
+
+    n_genes = len(limit) + 1
+    n_pool = len(expression)
+    # Genetic search is useless if the expression is degenerated
+    if n_pool is 0:
+        return [[False] * n_genes]
 
     key = str(expression)
     elite = elites[key] if key in elites else []
-    n_pool = min(m_pool, len(expression))
-    n_tops = min(m_tops, n_pool)
-    n_elite = min(m_elite, n_pool)
+    n_expr = len(expression)
+    pb_gen = 1 / n_expr
+    n_gen = int(n_expr / 10) + 1
+
+    #print("limit: " + str(n_genes) + " size: " + str(n_pool) + " pb: " + str(pb_gen) + " gen: " + str(n_gen))
 
     # Generate and evaluate
-    pool = [generate(expression) for _ in range(n_pool - len(elite))] + elite
-    fitness = [evaluate(time, expression, comb, cost_table, limit, get_alarm_cost) for comb in pool]
+    pool = [generate(expression, limit, n_genes, pb_gen) for _ in range(n_pool - len(elite))] + elite
+    fitness = [evaluate(time, expression, comb, cost_table, limit, alert_costs) for comb in pool]
     for _ in range(n_gen):
         # Mate, mutate and evaluate
-        prob = [random() for _ in pool]
-        pool += [x for even, odd, pb in zip(pool[::2], pool[1::2], prob) if pb < pb_mate for x in mate(even, odd)]
-        pool += [mutate(x, m_flips) for x, pb in zip(pool, prob) if not_pb_mutate <= pb]
-        fitness += [evaluate(time, expression, comb, cost_table, limit, get_alarm_cost) for comb in pool[n_pool:]]
+        pool += [x for even, odd in zip(pool[::2], pool[1::2]) for x in mate(even, odd, n_genes)]
+        pool += [mutate(x, n_genes) for x in pool]
+        fitness += [evaluate(time, expression, comb, cost_table, limit, alert_costs) for comb in pool[n_pool:]]
         # Select
         pool = [x for _, x in sorted(zip(fitness, pool))][:n_pool]
         fitness = [x for x in sorted(fitness)][:n_pool]
     # Return top N
-    elites[key] = pool[:n_elite]
-    return pool[:n_tops]
+    elites[key] = pool[:n_gen]
+    return pool[:m_tops]
 
 def test():
-    red_alert_interval = Interval(
-        left=LeftEndpoint(40, False, True),
-        right=RightEndpoint(45, False, True)
-    )
-    yellow_alert_interval = Interval(
-        left=LeftEndpoint(45, True, False),
-        right=RightEndpoint(70, False, True)
-    )
-    red_alert_cost = 1000
-    yellow_alert_cost = 50
-    def get_alarm_cost(location):
-        return (
-            red_alert_cost
-            if location & red_alert_interval in red_alert_interval
-            else
-            yellow_alert_cost
-            if location & yellow_alert_interval in yellow_alert_interval
-            else
-            0
-        )
-    limit = Interval(
-        left=LeftEndpoint(0, False, True),
-        right=RightEndpoint(100, False, True)
-    )
+    red_interval = Interval([((40, False), (45, True))])
+    yellow_interval = Interval([((45, True), (70, True))])
+    red_cost = 1000
+    yellow_cost = 50
+    alert_costs = [(red_interval, red_cost), (yellow_interval, yellow_cost)]
+    limit = Interval([((0, False), (100, True))])
     cost_table = {
         str((0, x)): {"": 0}
-        for x in limit
+        for x in limit.range()
     }
-    expression = Interval(
-        left=LeftEndpoint(0, False, True),
-        right=RightEndpoint(100, False, True)
-    )
+    expression = Interval([((0, False), (100, True))])
 
 
-    comb = [False] * 32 + [True] + [False] + [True] + [False] * 66
+    comb = [False] * 32 + [True] + [True] + [True] + [False] * 66
 
     print(evaluate(
         time=1,
@@ -253,7 +191,7 @@ def test():
         comb=comb,
         cost_table=cost_table,
         limit=limit,
-        get_alarm_cost=get_alarm_cost
+        alert_costs=alert_costs
     ))
 
     #while True:

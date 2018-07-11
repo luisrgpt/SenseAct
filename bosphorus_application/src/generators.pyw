@@ -1,7 +1,7 @@
 # coding=utf-8
 import csv
 from graphs import Graph, Node, Hyperedge
-from intervals import AbsoluteUncertainty, Interval, IntervalExpression, LeftEndpoint, RightEndpoint
+from intervals import AbsoluteUncertainty, Interval
 from random import randint, choice
 from time import strftime
 import genetic
@@ -11,7 +11,7 @@ def generate_submarine(location):
     while True:
         yield location
         if location is 0 or location is 100:
-            raise StopIteration()
+            return
 
         velocity = choice([-location, location])
         norm = abs(velocity)
@@ -21,7 +21,7 @@ def generate_submarine(location):
         location = location + normalized_vector
 
 class ByzantineProblem:
-    def __init__(self, location, or_interval, limit: Interval, get_alarm_cost, computation_rate):
+    def __init__(self, location, or_interval, limit: Interval, alert_costs, computation_rate):
         self.location = location
         self.timestamp = 0
         self.total_cost = 0
@@ -31,9 +31,9 @@ class ByzantineProblem:
                 )
             )
         self.batches: list = []
-        self.or_interval: IntervalExpression = or_interval
+        self.or_interval: Interval = or_interval
         self.limit: Interval = limit
-        self.get_alarm_cost = get_alarm_cost
+        self.alert_costs = alert_costs
         self.submarine = generate_submarine(randint(0, 100))
         self.computation_rate = computation_rate
         self.submarine_location = None
@@ -75,24 +75,15 @@ class ByzantineProblem:
                 csv_content += [cost]
                 csv_content += [does_detect]
                 csv_content += [
-                    Interval(
-                        left=LeftEndpoint(location - imprecision - decay, False, True),
-                        right=RightEndpoint(location + imprecision + decay, False, True)
-                    )
+                    Interval([
+                        ((location - imprecision - decay, False), (location + imprecision + decay, True))
+                    ])
                     if does_detect
                     else
-                    IntervalExpression(
-                        intervals=[
-                            Interval(
-                                left=self.limit.left,
-                                right=RightEndpoint(location - imprecision + decay, True, False)
-                            ),
-                            Interval(
-                                left=LeftEndpoint(location + imprecision - decay, True, False),
-                                right=self.limit.right
-                            )
-                        ]
-                    )
+                    Interval([
+                        (self.limit[0], (location - imprecision + decay, True)),
+                        ((location + imprecision - decay, False), self.limit[1])
+                    ])
                 ]
 
         csv_content = [str(x) for x in csv_content]
@@ -106,17 +97,9 @@ class ByzantineProblem:
         global decay_unit
 
         # Wait
-        snapshot = IntervalExpression(
-            intervals=[
-                Interval(
-                    left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
-                    right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
-                ) for x in self.or_interval
-            ]
-        )
+        snapshot = Interval(self.or_interval[:])
         self.or_interval += decay_unit
-        self.or_interval[0] &= self.limit
-        self.or_interval[-1] &= self.limit
+        self.or_interval &= self.limit
         # Update state
         self.graph += [
             Hyperedge(
@@ -136,9 +119,10 @@ class ByzantineProblem:
                 if not probe:
                     continue
                 location, imprecision, _, does_detect, _ = probe
-                margin = imprecision + decay
-                useless_yes = does_detect and self.limit.right.value - margin < location < self.limit.left.value + margin
-                useless_no = decay >= imprecision
+                upper_margin = self.limit[1][0] - imprecision - decay
+                lower_margin = self.limit[0][0] + imprecision + decay
+                useless_yes = does_detect and upper_margin < location < lower_margin
+                useless_no = not does_detect and decay >= imprecision
                 if useless_yes or useless_no:
                     batch[index] = None
                     continue
@@ -152,53 +136,27 @@ class ByzantineProblem:
         ]
         # Generate result if batch is not empty
         if len(batch) > 0:
-            snapshot = IntervalExpression(
-                intervals=[
-                    Interval(
-                        left=LeftEndpoint(x.left.value, x.left.is_open, x.left.is_closed),
-                        right=RightEndpoint(x.right.value, x.right.is_open, x.right.is_closed)
-                    ) for x in self.or_interval
-                ]
-            )
+            snapshot = Interval(self.or_interval[:])
 
             batch_cost = sum(x for x, _, _ in solution.batch)
-            interval = Interval(
-                left=LeftEndpoint(0, False, True),
-                right=RightEndpoint(0, False, True)
-            )
-            expression = IntervalExpression(
-                intervals=[
-                    Interval(
-                        left=self.limit.left,
-                        right=RightEndpoint(0, False, True)
-                    ),
-                    Interval(
-                        left=LeftEndpoint(0, False, True),
-                        right=self.limit.right
-                    )
-                ]
-            )
-            interval_left = interval.left
-            interval_right = interval.right
-            not_lower_right = expression[0].right
-            not_upper_left = expression[1].left
+            interval = Interval([((None, None),(None, None))])
+            expression = Interval([
+                (self.limit[0], (None, None)),
+                ((None, None), self.limit[1])
+            ])
+            interval_lower = interval[0]
+            interval_upper = interval[1]
+            not_lower_upper = expression[0][1]
+            not_upper_lower = expression[1][0]
             for location, imprecision, _, does_detect, _ in batch:
                 if does_detect:
-                    interval_left.value = location - imprecision
-                    interval_left.is_open = False
-                    interval_left.is_closed = True
-                    interval_right.value = location + imprecision
-                    interval_right.is_open = False
-                    interval_right.is_closed = True
+                    interval_lower = (location - imprecision, False)
+                    interval_upper = (location + imprecision, True)
                     for index in range(len(self.or_interval)):
                         self.or_interval[index] &= interval
                 else:
-                    not_lower_right.value = location - imprecision
-                    not_lower_right.is_open = True
-                    not_lower_right.is_closed = False
-                    not_upper_left.value = location + imprecision
-                    not_upper_left.is_open = True
-                    not_upper_left.is_closed = False
+                    not_lower_upper = (location - imprecision, False)
+                    not_upper_lower = (location + imprecision, True)
                     self.or_interval &= expression
 
             # Update state
@@ -215,26 +173,37 @@ class ByzantineProblem:
         else:
             self.batches += [None]
 
-        self.total_cost += self.get_alarm_cost(self.or_interval)
+        alert_cost = 0
+        x = Interval([])
+        for y in self.or_interval:
+            x.intervals = [y]
+            for alert_interval, cost in self.alert_costs:
+                lower = (x[0] if alert_interval[0][1] <= x[0][1] else alert_interval[0])[0]
+                upper = (x[0] if x[0][0] <= alert_interval[0][0] else alert_interval[0])[1]
+
+                if alert_cost < cost and (
+                        lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1])
+                ):
+                    alert_cost = cost
+
+        self.total_cost += alert_cost
 
         return self
 class DynamicFormula:
-    def __init__(self, limit: Interval, get_alarm_cost):
+    def __init__(self, limit: Interval, alert_costs):
         self.or_interval = None
         self.cost_table = {
             str((0, x)): {'': 0}
-            for x in Interval(
-                left=LeftEndpoint(0, False, True),
-                right=RightEndpoint(100, False, True)
-            )
+            for x in limit.range()
         }
         self.time = 1
         self.limit: Interval = limit
-        self.get_alarm_cost = get_alarm_cost
+        self.alert_costs = alert_costs
         cnt = 0
-        lmt = 1 + len(self.limit) * 4 + 4
-        for interval in self.limit:
-            genetic.search(self.time, interval, self.cost_table, 0, self.limit, get_alarm_cost)
+        lmt = 1 + self.limit.size() * 4 + 4
+        for interval in self.limit.range():
+            genetic.search(self.time, interval, self.cost_table, 0, self.limit, alert_costs)
+            #print(interval)
             if cnt is 0:
                 print(str(self.time) + ": " + str(interval))
                 lmt -= 4
@@ -243,12 +212,12 @@ class DynamicFormula:
     def __iadd__(self, problem: ByzantineProblem):
         cnt = 0
         for time in range(self.time, self.time + problem.computation_rate):
-            lmt = 1 + len(self.limit) * 4 + 4
-            for interval in self.limit:#(x for and_interval in problem.or_interval for x in and_interval):
-                top5 = genetic.search(time, interval, self.cost_table, 5, self.limit, self.get_alarm_cost)
+            lmt = 1 + self.limit.size() * 4 + 4
+            for interval in self.limit.range():#(x for and_interval in problem.or_interval for x in and_interval):
+                top5 = genetic.search(time, interval, self.cost_table, 5, self.limit, self.alert_costs)
                 self.cost_table[str((time, interval))] = {
                     str(' '.join([str(index) for index, y in enumerate(comb) if y])):
-                        genetic.evaluate(time, interval, comb, self.cost_table, self.limit, self.get_alarm_cost)
+                        genetic.evaluate(time, interval, comb, self.cost_table, self.limit, self.alert_costs)
                     for comb in top5
                 }
                 if cnt is 0:
@@ -277,10 +246,10 @@ class NoFormula:
     def __iadd__(self, problem):
         return self
 class GeneticSolution:
-    def __init__(self, limit, get_alarm_cost):
+    def __init__(self, limit, alert_costs):
         self.batch: list = []
         self.limit: Interval = limit
-        self.get_alarm_cost = get_alarm_cost
+        self.alert_costs = alert_costs
     def __iadd__(self, formula: DynamicFormula):
         comb = genetic.search(
             time=formula.time,
@@ -288,7 +257,7 @@ class GeneticSolution:
             cost_table=formula.cost_table,
             m_tops=1,
             limit=self.limit,
-            get_alarm_cost=self.get_alarm_cost
+            alert_costs=self.alert_costs
         )[0]
         self.batch = [(10, 3, index) for index, x in enumerate(comb) if x]
 
@@ -302,21 +271,21 @@ class RandomSolution:
 
         return self
 
-def ship(ship_location, submarine_location, limit, get_alarm_cost, computation_rate):
+def ship(ship_location, submarine_location, limit, alert_costs, computation_rate):
     problem = ByzantineProblem(
         location=ship_location,
         or_interval=submarine_location,
         limit=limit,
-        get_alarm_cost=get_alarm_cost,
+        alert_costs=alert_costs,
         computation_rate=computation_rate
     )
     formula = DynamicFormula(
         limit=limit,
-        get_alarm_cost=get_alarm_cost
+        alert_costs=alert_costs
     )
     solution = GeneticSolution(
         limit,
-        get_alarm_cost=get_alarm_cost
+        alert_costs=alert_costs
     )
     #formula = NoFormula()
     #solution = RandomSolution()

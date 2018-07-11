@@ -2,49 +2,29 @@
 import automata
 import interface
 import generators
-from intervals import LeftEndpoint, RightEndpoint, Interval, IntervalExpression
+from intervals import Interval
 
 #from intervals import test
 #from genetic import test
 #test()
 
-red_alert_interval = Interval(
-    left=LeftEndpoint(40, False, True),
-    right=RightEndpoint(45, False, True)
-)
-yellow_alert_interval = Interval(
-    left=LeftEndpoint(45, True, False),
-    right=RightEndpoint(70, False, True)
-)
-red_alert_cost = 1000
-yellow_alert_cost = 50
+red_interval = Interval([((40, False), (45, True))])
+yellow_interval = Interval([((45, True), (70, True))])
+red_cost = 1000
+yellow_cost = 50
 
-
-def get_alarm_cost(location):
-    return (
-        red_alert_cost
-        if location & red_alert_interval in red_alert_interval
-        else
-        yellow_alert_cost
-        if location & yellow_alert_interval in yellow_alert_interval
-        else
-        0
-    )
+ship_location = 0
+submarine_location = Interval([((0, False), (100, True))])
+limit = Interval([((0, False), (100, True))])
+alert_costs = [(red_interval, red_cost), (yellow_interval, yellow_cost)]
+computation_rate = 0
 
 ship = generators.ship(
-    ship_location=0,
-    submarine_location=IntervalExpression(
-        intervals=[Interval(
-            left=LeftEndpoint(0, False, True),
-            right=RightEndpoint(100, False, True)
-        )]
-    ),
-    limit=Interval(
-        left=LeftEndpoint(0, False, True),
-        right=RightEndpoint(100, False, True)
-    ),
-    get_alarm_cost=get_alarm_cost,
-    computation_rate=5
+    ship_location=ship_location,
+    submarine_location=submarine_location,
+    limit=limit,
+    alert_costs=alert_costs,
+    computation_rate=computation_rate
 )
 
 
@@ -61,19 +41,11 @@ def start_play_output():
     global ui, ship
     del ship
     ship = generators.ship(
-        ship_location=0,
-        submarine_location=IntervalExpression(
-            intervals=[Interval(
-                left=LeftEndpoint(0, False, True),
-                right=RightEndpoint(100, False, True)
-            )]
-        ),
-        limit=Interval(
-            left=LeftEndpoint(0, False, True),
-            right=RightEndpoint(100, False, True)
-        ),
-        get_alarm_cost=get_alarm_cost,
-        computation_rate=5
+        ship_location=ship_location,
+        submarine_location=submarine_location,
+        limit=limit,
+        alert_costs=alert_costs,
+        computation_rate=computation_rate
     )
     ui += 'reset'
     return 'start_play_input'
@@ -87,19 +59,11 @@ def start_next_output():
     global ui, ship
     del ship
     ship = generators.ship(
-        ship_location=0,
-        submarine_location=IntervalExpression(
-            intervals=[Interval(
-                left=LeftEndpoint(0, False, True),
-                right=RightEndpoint(100, False, True)
-            )]
-        ),
-        limit=Interval(
-            left=LeftEndpoint(0, False, True),
-            right=RightEndpoint(100, False, True)
-        ),
-        get_alarm_cost=get_alarm_cost,
-        computation_rate=5
+        ship_location=ship_location,
+        submarine_location=submarine_location,
+        limit=limit,
+        alert_costs=alert_costs,
+        computation_rate=computation_rate
     )
     ui += 'reset', next(ship)
 def ack_play_output():

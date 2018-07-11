@@ -47,7 +47,7 @@ class Graph:
     def __iadd__(self, hyperedges):
         # Connected Graph => ANY node in graph points to new node
         # Therefore: EVERY node in graph does NOT point to new node => Disconnected Graph => raise exception
-        # if not len(self.nodes) == 0 and not any(str(new_node.id) in node.edges for node in self.nodes.values()):
+        # if not len(self.nodes) == 0 and not any(str(new_node.id) in node.edges for node in self.nodes[0]s()):
         #    raise DisconnectedGraphException('Node ' + str(new_node.id) + ' is disconnected from graph')
         
         # Acyclic Graph => new node does not point to itself
@@ -93,22 +93,22 @@ class Graph:
         return os.path.abspath(dot.directory + '/' + dot.filename + '.' + dot.format)
 
 # def test():
-#     l0 = LeftEndpoint(-1, True, True)  # (LOW
-#     l1 = LeftEndpoint(0, True, True)   # (LOW
-#     l2 = LeftEndpoint(0, False, True)  # [0
-#     l3 = LeftEndpoint(0, True, False)  # (0
-#     l4 = LeftEndpoint(1, True, True)   # (LOW
-#     l5 = LeftEndpoint(1, False, True)  # [1
-#     l6 = LeftEndpoint(1, True, False)  # (1
+#     l0 = (-1, True, True)  # (LOW
+#     l1 = (0, True, True)   # (LOW
+#     l2 = (0, False, True)  # [0
+#     l3 = (0, True, False)  # (0
+#     l4 = (1, True, True)   # (LOW
+#     l5 = (1, False, True)  # [1
+#     l6 = (1, True, False)  # (1
 #
-#     r0 = RightEndpoint(-1, True, True) # HIGH)
-#     r1 = RightEndpoint(1, True, True)  # HIGH)
-#     r2 = RightEndpoint(1, False, True) # 1]
-#     r3 = RightEndpoint(1, True, False) # 1)
-#     r4 = RightEndpoint(0, True, True)  # HIGH)
-#     r5 = RightEndpoint(0, False, True) # 0]
-#     r6 = RightEndpoint(0, True, False) # 0)
-#     r7 = RightEndpoint(5, False, True) # 5]
+#     r0 = (-1, True, True) # HIGH)
+#     r1 = (1, True, True)  # HIGH)
+#     r2 = (1, False, True) # 1]
+#     r3 = (1, True, False) # 1)
+#     r4 = (0, True, True)  # HIGH)
+#     r5 = (0, False, True) # 0]
+#     r6 = (0, True, False) # 0)
+#     r7 = (5, False, True) # 5]
 #
 #     i0 = Interval(l1, r1) # (LOW..HIGH)
 #     i1 = Interval(l1, r2) # (LOW..1]

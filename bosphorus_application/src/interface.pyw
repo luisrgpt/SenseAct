@@ -8,7 +8,7 @@ class Protocol(asyncio.Protocol):
         Protocol.transport = transport
     def data_received(self, data):
         Handler.app += data.decode('utf8')
-class Handler():
+class Handler:
     app = None
 
     def __init__(self, app):
