@@ -1,35 +1,43 @@
 # coding=utf-8
-from intervals import AbsoluteUncertainty, Interval
-from random import random, randint, randrange, choice
+from intervals import Interval
+from random import random, randint, randrange
 
-# Constants
-m_flips = 1
-pb_neg = 0.7
-
-elites = {}
-
-def generate(expression, limit, n_genes, pb_gen):
+def generate(
+        approximation: Interval,
+        bounds: tuple,
+        n_genes: int,
+        pb_gen:float
+):
     return [
-        limit[0][0][0] + 3 <= x <= limit[0][1][0] - 3 and x in expression and random() < pb_gen
+        bounds[0][0] + 3 <= x <= bounds[1][0] - 3 and x in approximation and random() < pb_gen
         for x in range(n_genes)
     ]
-
-def evaluate(time, expression, comb, cost_table, limit: Interval, alert_costs):
+def evaluate(
+        time: int,
+        approximation: Interval,
+        cost_table: dict,
+        m_tops: int,
+        bounds: tuple,
+        alert_costs: list,
+        decay_unit: tuple,
+        m_flips: int,
+        pb_neg: float,
+        comb: list
+):
     #length = len([x for x in comb if x])
     #if length > 2:
     #    print(length)
+    (o_lower, o_open), (o_upper, o_closed) = decay_unit
     minus_1 = time - 1
-    decay_unit = AbsoluteUncertainty(0, 1)
-    n_interval = expression.size()
+    n_interval = approximation.size()
     n_comb = len(comb)
 
-    no = Interval(expression[:])
+    no = Interval(approximation[:])
     no_prob = 1
 
     yes = Interval([((0, False), (0, True))])
 
     total_cost = sum(10 for x in comb if x)
-    x = Interval([])
     if n_interval is not 0:
         for i, positive in enumerate(comb):
             if not positive:
@@ -57,24 +65,55 @@ def evaluate(time, expression, comb, cost_table, limit: Interval, alert_costs):
             yes[0] = ((lower_value, lower_value != i - 3), yes[0][1])
             for endpoint in endpoints:
                 yes[0] = (yes[0][0], (endpoint, endpoint == i + 3))
-                if not(yes[0][0][0] == yes[0][1][0] and yes[0][0][1] and not yes[0][1][1]) and yes in expression:
-                    yes &= expression
+                if not(yes[0][0][0] == yes[0][1][0] and yes[0][0][1] and not yes[0][1][1]) and yes in approximation:
+                    yes &= approximation
                     no &= ~yes
 
-                    for y in yes:
-                        x.intervals = [y]
+                    for x in yes:
                         #print(x)
-                        yes_prob = x.size() / n_interval
-                        alert_cost = 0
-                        for alert_interval, cost in alert_costs:
-                            lower = (x[0] if alert_interval[0][1] <= x[0][1] else alert_interval[0])[0]
-                            upper = (x[0] if x[0][0] <= alert_interval[0][0] else alert_interval[0])[1]
+                        yes_prob = (x[1][0] - x[0][0]) / n_interval
 
-                            if lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1]):
+                        alert_cost = 0
+                        for y, cost in alert_costs:
+                            if (x if y[1] <= x[1] else y)[0] < (x if x[0] <= y[0] else y)[1]:
                                 alert_cost = cost
-                        x += decay_unit
-                        x &= limit
-                        wait_cost = min(cost_table[str((minus_1, x))].values())
+
+                        x = ((x[0][0] + o_lower, x[0][1] or o_open), (x[1][0] + o_upper, x[1][1] and o_closed))
+                        x = (max(x[0], bounds[0]), min(x[1], bounds[1]))
+
+                        if str((minus_1, Interval([x]))) not in cost_table:
+                            top5 = search(
+                                time=minus_1,
+                                approximation=Interval([x]),
+                                cost_table=cost_table,
+                                m_tops=m_tops,
+                                bounds=bounds,
+                                alert_costs=alert_costs,
+                                decay_unit=decay_unit,
+                                pb_neg=pb_neg,
+                                m_flips=m_flips
+                            )
+                            cost_table[str((minus_1, Interval([x])))] = {
+                                str(' '.join([str(index) for index, y in enumerate(comb) if y])):
+                                    evaluate(
+                                        time=minus_1,
+                                        approximation=Interval([x]),
+                                        cost_table=cost_table,
+                                        m_tops=m_tops,
+                                        bounds=bounds,
+                                        alert_costs=alert_costs,
+                                        decay_unit=decay_unit,
+                                        pb_neg=pb_neg,
+                                        m_flips=m_flips,
+                                        comb=comb
+                                    )
+                                for comb in top5
+                            }
+
+                        wait_cost = min(cost_table[str((minus_1, Interval([x])))].values())
+                        if minus_1 is 1:
+                            print("no : " + str((minus_1, Interval([x]))) + " -> " + str(alert_cost) + " + " + str(wait_cost))
+
                         total_cost += yes_prob * (alert_cost + wait_cost)
                         no_prob -= yes_prob
 
@@ -84,128 +123,229 @@ def evaluate(time, expression, comb, cost_table, limit: Interval, alert_costs):
     alert_cost = 0
     wait_cost = 0
     #print(no)
-    for y in no:
-        x.intervals = [y]
-        for alert_interval, cost in alert_costs:
-            lower = (x[0] if alert_interval[0][1] <= x[0][1] else alert_interval[0])[0]
-            upper = (x[0] if x[0][0] <= alert_interval[0][0] else alert_interval[0])[1]
-
-            if alert_cost < cost and (
-                lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1])
-            ):
+    for x in no:
+        for y, cost in alert_costs:
+            if alert_cost < cost and (x if y[1] <= x[1] else y)[0] < (x if x[0] <= y[0] else y)[1]:
                 alert_cost = cost
-        x += decay_unit
-        x &= limit
-        wait_cost += min(cost_table[str((minus_1, x))].values())
+
+        x = ((x[0][0] + o_lower, x[0][1] or o_open), (x[1][0] + o_upper, x[1][1] and o_closed))
+        x = (max(x[0], bounds[0]), min(x[1], bounds[1]))
+
+        if str((minus_1, Interval([x]))) not in cost_table:
+            top5 = search(
+                time=minus_1,
+                approximation=Interval([x]),
+                cost_table=cost_table,
+                m_tops=m_tops,
+                bounds=bounds,
+                alert_costs=alert_costs,
+                decay_unit=decay_unit,
+                pb_neg=pb_neg,
+                m_flips=m_flips
+            )
+            cost_table[str((minus_1, Interval([x])))] = {
+                str(' '.join([str(index) for index, y in enumerate(comb) if y])):
+                    evaluate(
+                        time=minus_1,
+                        approximation=Interval([x]),
+                        cost_table=cost_table,
+                        m_tops=m_tops,
+                        bounds=bounds,
+                        alert_costs=alert_costs,
+                        decay_unit=decay_unit,
+                        pb_neg=pb_neg,
+                        m_flips=m_flips,
+                        comb=comb
+                    )
+                for comb in top5
+            }
+
+        wait_cost += min(cost_table[str((minus_1, Interval([x])))].values())
+        if minus_1 is 1:
+            print("no : " + str((minus_1, Interval([x]))) + " -> " + str(alert_cost) + " + " + str(wait_cost))
     total_cost += no_prob * (alert_cost + wait_cost)
 
     return total_cost
-def mate(chromosome_1: list, chromosome_2: list, n_genes):
+def mate(
+        chromosome_1: list,
+        chromosome_2: list
+):
     chromosome_1 = [x for x in chromosome_1]
     chromosome_2 = [x for x in chromosome_2]
 
-    answers_1 = [index for index, x in enumerate(chromosome_1) if x]
-    answers_2 = [index for index, x in enumerate(chromosome_2) if x]
+    # Check if both chromosomes are identical
+    if chromosome_1 == chromosome_2:
+        return chromosome_1, chromosome_2
 
-    point_1 = choice(answers_1) if len(answers_1) > 0 else randrange(n_genes)
-    point_2 = choice(answers_2) if len(answers_2) > 0 else randrange(n_genes)
+    # Identify first difference
+    min_point = None
+    for min_point in range(len(chromosome_1)):
+        if chromosome_1[min_point] != chromosome_2[min_point]:
+            break
 
-    chromosome_1[point_1], chromosome_2[point_2] = chromosome_2[point_2], chromosome_1[point_1]
+    # Identify last difference
+    max_point = None
+    for max_point in range(len(chromosome_1) - 1, -1, -1):
+        if chromosome_1[max_point] != chromosome_2[max_point]:
+            break
+
+    # Check if both chromosomes differ at one and only one gene
+    if min_point == max_point:
+        return chromosome_1, chromosome_2
+
+    cx_point = randint(min_point, max_point)
+    chromosome_1[cx_point:], chromosome_2[cx_point:] = chromosome_2[cx_point:], chromosome_1[cx_point:]
 
     return chromosome_1, chromosome_2
-def mutate(chromosome: list, n_genes):
+def mutate(
+        chromosome: list,
+        n_genes: int,
+        approximation: Interval,
+        pb_neg: float,
+        m_flips: int
+):
     chromosome = [x for x in chromosome]
 
     flip_signal = pb_neg < random()
-    n_yes = sum(1 for x in chromosome if x)
     # Cannot flip bits to false if there are no true's
-    if n_yes is 0 and not flip_signal:
+    if sum(1 for x in chromosome if x) is 0 and not flip_signal:
         return chromosome
 
-    if n_yes >= 4 and flip_signal:
-        flip_signal = not flip_signal
-
-    # Assulowerg m_flips is always greater than 0
+    # Assuming m_flips is always greater than 0
     n_flips = randint(1, m_flips)
-    # For each number of flips
-    for _ in range(n_flips):
-        # Repeat until gene is the opposite of its flip
-        x = randrange(n_genes)
-        while chromosome[x] == flip_signal:
+    if flip_signal:
+        # For each number of flips
+        for _ in range(n_flips):
+            # Repeat until gene is the opposite of its flip
             x = randrange(n_genes)
-        # Flip value
-        chromosome[x] = not chromosome[x]
+            while chromosome[x] == flip_signal and x in approximation:
+                x = randrange(n_genes)
+            # Flip value
+            chromosome[x] = not chromosome[x]
+    else:
+        # For each number of flips
+        for _ in range(n_flips):
+            # Repeat until gene is the opposite of its flip
+            x = randrange(n_genes)
+            while chromosome[x] == flip_signal:
+                if sum(1 for x in chromosome if x) is 0:
+                    return chromosome
+                x = randrange(n_genes)
+            # Flip value
+            chromosome[x] = not chromosome[x]
 
     return chromosome
-def search(time, expression, cost_table, m_tops, limit: Interval, alert_costs):
-    global elites
+def search(
+        time: int,
+        approximation: Interval,
+        cost_table: dict,
+        m_tops: int,
+        bounds: tuple,
+        alert_costs: list,
+        decay_unit: tuple,
+        m_flips: int,
+        pb_neg: float
+):
+    elite = [
+        y
+        for x in approximation
+        if str((time - 1, x)) in cost_table
+        for y in cost_table[str((time - 1, x))].values()
+    ]
 
-    n_genes = len(limit) + 1
-    n_pool = len(expression)
-    # Genetic search is useless if the expression is degenerated
+    n_genes = (bounds[1][0] - bounds[0][0]) + 1
+    n_pool = approximation.size()
+    # Genetic search is useless if the approximation is degenerated
     if n_pool is 0:
         return [[False] * n_genes]
 
-    key = str(expression)
-    elite = elites[key] if key in elites else []
-    n_expr = len(expression)
-    pb_gen = 1 / n_expr
-    n_gen = int(n_expr / 10) + 1
+    pb_gen = 1 / n_pool
+    n_gen = int(n_pool / 10) + 1
 
-    #print("limit: " + str(n_genes) + " size: " + str(n_pool) + " pb: " + str(pb_gen) + " gen: " + str(n_gen))
+    #print("bounds: " + str(n_genes) + " size: " + str(n_pool) + " pb: " + str(pb_gen) + " gen: " + str(n_gen))
 
     # Generate and evaluate
-    pool = [generate(expression, limit, n_genes, pb_gen) for _ in range(n_pool - len(elite))] + elite
-    fitness = [evaluate(time, expression, comb, cost_table, limit, alert_costs) for comb in pool]
+    pool = [generate(approximation, bounds, n_genes, pb_gen) for _ in range(n_pool - len(elite))] + elite
+    fitness = [
+        evaluate(
+            time=time,
+            approximation=approximation,
+            cost_table=cost_table,
+            m_tops=m_tops,
+            bounds=bounds,
+            alert_costs=alert_costs,
+            decay_unit=decay_unit,
+            pb_neg=pb_neg,
+            m_flips=m_flips,
+            comb=x
+        )
+        for x in pool
+    ]
     for _ in range(n_gen):
         # Mate, mutate and evaluate
-        pool += [x for even, odd in zip(pool[::2], pool[1::2]) for x in mate(even, odd, n_genes)]
-        pool += [mutate(x, n_genes) for x in pool]
-        fitness += [evaluate(time, expression, comb, cost_table, limit, alert_costs) for comb in pool[n_pool:]]
+        pool += [x for even, odd in zip(pool[::2], pool[1::2]) for x in mate(even, odd)]
+        pool += [mutate(x, n_genes, approximation, pb_neg, m_flips) for x in pool]
+        fitness += [
+            evaluate(
+                time=time,
+                approximation=approximation,
+                cost_table=cost_table,
+                m_tops=m_tops,
+                bounds=bounds,
+                alert_costs=alert_costs,
+                decay_unit=decay_unit,
+                pb_neg=pb_neg,
+                m_flips=m_flips,
+                comb=x
+            )
+            for x in pool
+        ]
         # Select
         pool = [x for _, x in sorted(zip(fitness, pool))][:n_pool]
         fitness = [x for x in sorted(fitness)][:n_pool]
     # Return top N
-    elites[key] = pool[:n_gen]
     return pool[:m_tops]
 
 def test():
-    red_interval = Interval([((40, False), (45, True))])
-    yellow_interval = Interval([((45, True), (70, True))])
-    red_cost = 1000
-    yellow_cost = 50
-    alert_costs = [(red_interval, red_cost), (yellow_interval, yellow_cost)]
-    limit = Interval([((0, False), (100, True))])
+    from submarine import Parameters
+
+    time = 1
+    set_of_probes = [37]
+    approximation = Interval([((16, True), (40, True))])
+
     cost_table = {
         str((0, x)): {"": 0}
-        for x in limit.range()
+        for x in Interval([Parameters.bounds]).range()
     }
-    expression = Interval([((0, False), (100, True))])
-
-
-    comb = [False] * 32 + [True] + [True] + [True] + [False] * 66
+    comb = [False] * (Interval([Parameters.bounds]).size() + 1)
+    for pos in set_of_probes:
+        comb[pos] = True
 
     print(evaluate(
-        time=1,
-        expression=expression,
-        comb=comb,
+        time=time,
+        approximation=approximation,
         cost_table=cost_table,
-        limit=limit,
-        alert_costs=alert_costs
+        m_tops=Parameters.m_tops,
+        bounds=Parameters.bounds,
+        alert_costs=Parameters.alert_costs,
+        decay_unit=Parameters.decay_unit,
+        pb_neg=Parameters.pb_neg,
+        m_flips=Parameters.m_flips,
+        comb=comb
     ))
 
     #while True:
     #    search(
     #        time=1,
-    #        expression=expression,
+    #        approximation=approximation,
     #        cost_table=cost_table,
     #        m_tops=5,
-    #        limit=limit
+    #        bounds=bounds
     #    )
     #    print(
     #        '\n'.join([
     #            str(rank) + '-> ' + ' '.join([str(index) for index, x in enumerate(comb) if x]) + ': ' +
-    # str(evaluate(1, expression, comb, cost_table, limit))
-    #            for rank, comb in enumerate(elites[str(expression)])
+    # str(evaluate(1, approximation, comb, cost_table, bounds))
+    #            for rank, comb in enumerate(elites[str(approximation)])
     #        ])
     #    )

@@ -1,60 +1,5 @@
 # coding=utf-8
-from dataclasses import dataclass
 from math import inf
-
-@dataclass
-class Uncertainty:
-    center: float
-    absolute: float
-    relative: float
-    def __add__(self, other=None):
-        if other is None:
-            return self
-
-        result_center = self.center + other.center
-        result_absolute = self.absolute + other.absolute
-        result = AbsoluteUncertainty(result_center, result_absolute)
-
-        return result
-    def __sub__(self, other=None):
-        if other is None:
-            return self
-
-        result_center = self.center - other.center
-        result_absolute = self.absolute + other.absolute
-        result = AbsoluteUncertainty(result_center, result_absolute)
-
-        return result
-    def __mul__(self, other=None):
-        if other is None:
-            return self
-
-        result_center = self.center * other.center
-        result_relative = self.relative + other.relative
-        result = RelativeUncertainty(result_center, result_relative)
-
-        return result
-    def __truediv__(self, other=None):
-        if other is None:
-            return self
-
-        result_center = self.center / other.center
-        result_relative = self.relative + other.relative
-        result = RelativeUncertainty(result_center, result_relative)
-
-        return result
-class AbsoluteUncertainty(Uncertainty):
-    def __init__(self, center: float, absolute: float):
-        relative = (absolute / center * 100) if center != 0 else 0
-        super().__init__(float(center), float(absolute), float(relative))
-    def __repr__(self):
-        return str(self.center) + ' +- ' + str(self.absolute)
-class RelativeUncertainty(Uncertainty):
-    def __init__(self, center: float, relative: float):
-        absolute = relative * center / 100
-        super().__init__(float(center), float(absolute), float(relative))
-    def __repr__(self):
-        return str(self.center) + ' +- ' + str(self.relative) + '%'
 
 class Interval:
     def __init__(self, intervals: list):
@@ -73,6 +18,10 @@ class Interval:
         return self.intervals.__eq__(other.intervals)
     def __ne__(self, other):
         return self.intervals.__ne__(other.intervals)
+    def __lt__(self, other):
+        return self.intervals.__lt__(other.intervals)
+    def __le__(self, other):
+        return self.intervals.__le__(other.intervals)
 
     def range(self):
         if -inf in self[0][0] or inf in self[-1][1]:
@@ -199,43 +148,67 @@ class Interval:
                 n_self -= 1
             x += 1
         return self
-    def __iadd__(self, other: Uncertainty):
-        for x in range(len(self)):
-            self_absolute = (self[x][1][0] - self[x][0][0]) / 2
-            self_center = self[x][0][0] + self_absolute
-            self_uncertainty = AbsoluteUncertainty(self_center, self_absolute)
+    def __iadd__(self, other):
+        (o_lower, o_open), (o_upper, o_closed) = other
 
-            uncertainty = self_uncertainty + other
-            center = uncertainty.center
-            absolute = uncertainty.absolute
+        n_self = len(self)
+        if n_self is 0:
+            self.intervals += [other]
+        elif n_self is 1:
+            (s_lower, s_open), (s_upper, s_closed) = self[0]
+            self[0] = ((s_lower + o_lower, s_open or o_open), (s_upper + o_upper, s_closed and o_closed))
+        else:
+            n_self -= 1
+            x = 0
+            while x < n_self:
+                y = x + 1
 
-            self[x] = ((center - absolute, self[x][0][1]), (center + absolute, self[x][1][1]))
+                (x_lower, x_open), (x_upper, x_closed) = self[x]
+                (y_lower, y_open), (y_upper, y_closed) = self[y]
 
-        #self.sort()
+                self[x] = ((x_lower + o_lower, x_open or o_open), (x_upper + o_upper, x_closed and o_closed))
+                self[y] = ((y_lower + o_lower, y_open or o_open), (y_upper + o_upper, y_closed and o_closed))
+
+                lower = (self[x] if self[y][1] <= self[x][1] else self[y])[0]
+                upper = (self[x] if self[x][0] <= self[y][0] else self[y])[1]
+
+                if lower <= upper:
+                    self[x] = (min(self[x][0], self[y][0]), max(self[x][1], self[y][1]))
+                    del [self[y]]
+                    n_self -= 1
+                x += 1
         return self
-    def __isub__(self, other: Uncertainty):
-        for x in range(len(self)):
-            self_absolute = (self[x][1][0] - self[x][0][0]) / 2
-            self_center = self[x][0][0] + self_absolute
-            self_uncertainty = AbsoluteUncertainty(self_center, self_absolute)
-
-            uncertainty = self_uncertainty - other
-            center = uncertainty.center
-            absolute = uncertainty.absolute
-
-            self[x] = ((center - absolute, self[x][0][1]), (center + absolute, self[x][1][1]))
-
-        #self.sort()
-        return self
+    # def __isub__(self, other):
+    #     (o_lower, o_open), (o_upper, o_closed) = other
+    #
+    #     n_self = len(self)
+    #     if n_self is 1:
+    #         (s_lower, s_open), (s_upper, s_closed) = self[0]
+    #         self[0] = ((s_lower - o_lower, s_open or o_open), (s_upper - o_upper, s_closed and o_closed))
+    #         lower, upper = self[0]
+    #         if upper <= lower:
+    #             del self[0]
+    #     else:
+    #         x = 0
+    #         while x < n_self:
+    #             (x_lower, x_open), (x_upper, x_closed) = self[x]
+    #
+    #             self[x] = ((x_lower - o_lower, x_open or o_open), (x_upper - o_upper, x_closed and o_closed))
+    #
+    #             lower, upper = self[0]
+    #             if upper <= lower:
+    #                 del self[0]
+    #                 n_self -= 1
+    #     return self
     def __invert__(self):
         result = Interval(self[:])
         result.invert()
         return result
-    def __add__(self, other: Uncertainty):
+    def __add__(self, other):
         result = Interval(self[:])
         result += other
         return result
-    def __sub__(self, other: Uncertainty):
+    def __sub__(self, other):
         result = Interval(self[:])
         result -= other
         return result
@@ -422,5 +395,5 @@ def test():
     print(str(e1) + ' and ' + str(i7) + ' = ' + str(e1 & i7))
     print(str(e1) + ' in ' + str(i7) + ' = ' + str(e1 in i7))
     print(str(i7) + ' in ' + str(e1) + ' = ' + str(i7 in e1))
-    print(str(i7 | i11))
+    print(str(i7) + ' or ' + str(i11) + ' = ' + str(i7 | i11))
     print(str(e0 | i10 | i11) + ' and ' + str(i12) + ' = ' + str((e0 | i10 | i11) & i12))

@@ -1,111 +1,110 @@
 # coding=utf-8
-import automata
-import interface
-import generators
-from intervals import Interval
+
+from automata import Automaton
+from frontend import Handler
+from backend import search
 
 #from intervals import test
-#from genetic import test
-#test()
+from genetic import test
+test()
 
-red_interval = Interval([((40, False), (45, True))])
-yellow_interval = Interval([((45, True), (70, True))])
-red_cost = 1000
-yellow_cost = 50
-
-ship_location = 0
-submarine_location = Interval([((0, False), (100, True))])
-limit = Interval([((0, False), (100, True))])
-alert_costs = [(red_interval, red_cost), (yellow_interval, yellow_cost)]
-computation_rate = 0
-
-ship = generators.ship(
-    ship_location=ship_location,
-    submarine_location=submarine_location,
-    limit=limit,
-    alert_costs=alert_costs,
-    computation_rate=computation_rate
-)
-
+from submarine import Parameters
+#from forest_fires import Parameters
 
 def init_output():
     print("init")
-    global ui
-    ui.start()
+    global frontend
+    frontend.start()
 def start_output():
     print("start")
-    global ui
-    ui += 'reset', 'next', 'play', 'reset'
+    global frontend
+    frontend += 'reset', 'next', 'play', 'reset'
 def start_play_output():
     print("start play")
-    global ui, ship
-    del ship
-    ship = generators.ship(
-        ship_location=ship_location,
-        submarine_location=submarine_location,
-        limit=limit,
-        alert_costs=alert_costs,
-        computation_rate=computation_rate
+    global frontend, backend
+    del backend
+    backend = search(
+        approximation=Parameters.approximation,
+        bounds=Parameters.bounds,
+
+        alert_costs=Parameters.alert_costs,
+        computation_rate=Parameters.computation_rate,
+        decay_unit=Parameters.decay_unit,
+        input_source=Parameters.method(Parameters.argument),
+
+        pb_neg=Parameters.pb_neg,
+        m_flips=Parameters.m_flips,
+        m_tops=Parameters.m_tops,
+
+        location=Parameters.backend_location
     )
-    ui += 'reset'
+    frontend += 'reset'
     return 'start_play_input'
 def first_play_output():
     print("start play")
-    global ui
-    ui += 'pause', 'stop', 'repeat-all'
+    global frontend
+    frontend += 'pause', 'stop', 'repeat-all'
     return 'first_play_input'
 def start_next_output():
     print("start next")
-    global ui, ship
-    del ship
-    ship = generators.ship(
-        ship_location=ship_location,
-        submarine_location=submarine_location,
-        limit=limit,
-        alert_costs=alert_costs,
-        computation_rate=computation_rate
+    global frontend, backend
+    del backend
+    backend = search(
+        approximation=Parameters.approximation,
+        bounds=Parameters.bounds,
+
+        alert_costs=Parameters.alert_costs,
+        computation_rate=Parameters.computation_rate,
+        decay_unit=Parameters.decay_unit,
+        input_source=Parameters.method(Parameters.argument),
+
+        pb_neg=Parameters.pb_neg,
+        m_flips=Parameters.m_flips,
+        m_tops=Parameters.m_tops,
+
+        location=Parameters.backend_location
     )
-    ui += 'reset', next(ship)
+    frontend += 'reset', next(backend)
 def ack_play_output():
     print("ack play")
 def ack_next_output():
     print("ack next")
 def play_output():
     print("play")
-    global ui
-    ui += next(ship)
+    global frontend
+    frontend += next(backend)
     return 'wait_input'
 def next_output():
     print("next")
-    global ui
-    ui += next(ship)
+    global frontend
+    frontend += next(backend)
     return 'wait_input'
 def win_play_output():
     print("win play")
-    global ui
-    ui += 'stop', 'repeat-all'
+    global frontend
+    frontend += 'stop', 'repeat-all'
 def win_next_output():
     print("win next")
-    global ui
-    ui += 'stop', 'repeat-all'
+    global frontend
+    frontend += 'stop', 'repeat-all'
 def lose_play_output():
     print("lose play")
-    global ui
-    ui += 'stop', 'repeat-all'
+    global frontend
+    frontend += 'stop', 'repeat-all'
 def lose_next_output():
     print("lose next")
-    global ui
-    ui += 'stop', 'repeat-all'
+    global frontend
+    frontend += 'stop', 'repeat-all'
 def pause_output():
     print("pause")
-    global ui
-    ui += 'previous', 'next', 'play', 'stop', 'repeat-all'
+    global frontend
+    frontend += 'previous', 'next', 'play', 'stop', 'repeat-all'
 def quit_output():
     #global exit_event
     #exit_event.set()
     pass
 
-app = automata.Automaton(
+app = Automaton(
     state_transitions={
         'init_input': 'init_state',
         'quit_input': 'quit_state',
@@ -186,6 +185,21 @@ app = automata.Automaton(
         'pause_state': pause_output
     }
 )
-ui = interface.Handler(app)
+backend = search(
+    approximation=Parameters.approximation,
+    bounds=Parameters.bounds,
+
+    alert_costs=Parameters.alert_costs,
+    computation_rate=Parameters.computation_rate,
+    decay_unit=Parameters.decay_unit,
+    input_source=Parameters.method(Parameters.argument),
+
+    pb_neg=Parameters.pb_neg,
+    m_flips=Parameters.m_flips,
+    m_tops=Parameters.m_tops,
+
+    location=Parameters.backend_location
+)
+frontend = Handler(app)
 
 app += 'init_input'
