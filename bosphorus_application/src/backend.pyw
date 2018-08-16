@@ -5,6 +5,7 @@ from intervals import Interval
 import genetic
 
 from time import strftime
+from ast import literal_eval
 import csv
 
 class UncertainByzantineProblem:
@@ -18,23 +19,23 @@ class UncertainByzantineProblem:
         self.decay_unit: tuple = decay_unit
     def __iadd__(self, solution):
         # Decaying probes
-        snapshot = Interval(solution.state[:])
-        solution.state += solution.decay_unit
-        solution.state &= solution.bounds
+        snapshot = Interval(solution.appr[:])
+        solution.appr += self.decay_unit
+        solution.appr &= Interval([solution.bounds])
         solution.graph += [
             Hyperedge(
                 sources=[x for x in snapshot if x in interval],
                 targets=[interval],
                 weight=0,
                 label='Wait'
-            ) for interval in solution.state
+            ) for interval in solution.appr
         ]
         # Useless batches (after too much decay)
         for timestamp, batch in enumerate(solution.batches):
             if not batch:
                 continue
 
-            decay = solution.timestamp - timestamp
+            decay = (solution.timestamp - timestamp) * self.decay_unit
             for index, probe in enumerate(batch):
                 if not probe:
                     continue
@@ -50,14 +51,14 @@ class UncertainByzantineProblem:
         # Incremented cost after decay
         alert_cost = 0
         x = Interval([])
-        for y in solution.state:
+        for y in solution.appr:
             x.intervals = [y]
-            for alert_interval, cost in solution.alert_costs:
-                lower = (x[0] if alert_interval[0][1] <= x[0][1] else alert_interval[0])[0]
-                upper = (x[0] if x[0][0] <= alert_interval[0][0] else alert_interval[0])[1]
+            for alert_interval, cost in self.alert_costs:
+                lower = (x[0] if Interval([alert_interval])[0][1] <= x[0][1] else alert_interval[0])[0]
+                upper = (x[0] if x[0][0] <= Interval([alert_interval])[0][0] else alert_interval[0])[1]
 
                 if alert_cost < cost and (
-                        lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1])
+                    lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] < upper[1])
                 ):
                     alert_cost = cost
 
@@ -67,27 +68,41 @@ class UncertainByzantineProblem:
 class DynamicGeneticFormula:
     def __init__(
             self,
-            approximation: Interval,
+            appr: Interval,
             bounds: tuple,
 
             alert_costs: list,
             decay_unit: tuple,
 
             computation_rate: int,
-            pb_neg: float,
+            m_stagnation: float,
             m_flips: int,
+            n_pool: int,
             m_tops: int,
-    ):
-        self.approximation: Interval = approximation
+            n_sel: int,
+            n_precisions: list,
+            n_costs: dict,
+
+            k_mat: float,
+            k_mut: float
+        ):
+        self.appr: Interval = appr
         self.bounds: tuple = bounds
 
         self.alert_costs: list = alert_costs
         self.decay_unit: tuple = decay_unit
 
         self.computation_rate: int = computation_rate
-        self.pb_neg: float = pb_neg
+        self.m_stagnation: float = m_stagnation
         self.m_flips: int = m_flips
+        self.n_pool: int = n_pool
         self.m_tops: int  = m_tops
+        self.n_sel: int = n_sel
+        self.n_precisions = n_precisions
+        self.n_costs = n_costs
+
+        self.k_mat: float = k_mat
+        self.k_mut: float = k_mut
 
         self.cost_table: dict = {
             str((0, x)): {'': 0}
@@ -101,80 +116,77 @@ class DynamicGeneticFormula:
             lmt = 1 + (self.bounds[1][0] - self.bounds[0][0]) * 4 + 4
             for interval in Interval([self.bounds]).range():
                 #(x for and_interval in problem.or_interval for x in and_interval):
-                top5 = genetic.search(
+                genetic.search(
                     time=time,
-                    approximation=interval,
+                    appr=interval,
                     cost_table=self.cost_table,
+                    n_pool=self.n_pool,
                     m_tops=self.m_tops,
+                    n_sel=self.n_sel,
                     bounds=self.bounds,
                     alert_costs=self.alert_costs,
                     decay_unit=self.decay_unit,
-                    pb_neg=self.pb_neg,
-                    m_flips=self.m_flips
+                    m_stagnation=self.m_stagnation,
+                    m_flips=self.m_flips,
+                    n_precisions=self.n_precisions,
+                    n_costs=self.n_costs,
+
+                    k_mat=self.k_mat,
+                    k_mut=self.k_mut
                 )
-                self.cost_table[str((time, interval))] = {
-                    str(' '.join([str(index) for index, y in enumerate(x) if y])):
-                        genetic.evaluate(
-                            time=time,
-                            approximation=interval,
-                            cost_table=self.cost_table,
-                            m_tops=self.m_tops,
-                            bounds=self.bounds,
-                            alert_costs=self.alert_costs,
-                            decay_unit=self.decay_unit,
-                            pb_neg=self.pb_neg,
-                            m_flips=self.m_flips,
-                            comb=x
-                        )
-                    for x in top5
-                }
-                #print(str((time, interval)) + " : " + str(self.cost_table[str((time, interval))]))
+                #print(str((time, interval)) + ' : ' + str(self.cost_table[str((time, interval))]))
                 if cnt is 0:
-                    print(str(time) + ": " + str(interval))
+                    print(str(time) + ': ' + str(interval))
                     lmt -= 4
+
+                    with open('log/test.csv', 'w') as file:
+                        writer = csv.writer(
+                            file,
+                            escapechar='\\',
+                            lineterminator='\n',
+                            quoting=csv.QUOTE_NONE
+                        )
+                        writer.writerow(
+                            ['time till done', 'interval', 'probes', 'cost', 'probes', 'cost', 'probes', 'cost',
+                             'probes',
+                             'cost', 'probes', 'cost'])
+                        for row_key, row_value in self.cost_table.items():
+                            t, s = row_key[1:-1].split(', ', maxsplit=1)
+                            x = literal_eval(s)
+                            i = (
+                                ('{' + str(x[0][0]) + '}')
+                                if not x[0][1] and x[1][1] and x[0][0] == x[1][0]
+                                else
+                                (
+                                    ('(' if x[0][1] else '[') +
+                                    str(float(x[0][0])) +
+                                    '..' +
+                                    str(float(x[1][0])) +
+                                    (']' if x[1][1] else ')')
+                                )
+                            )
+                            writer.writerow([t] + [i] + [x for cell in row_value.items() for x in cell])
+
                 cnt += 1
                 cnt %= lmt
-
-            with open('log/test.csv', 'w') as file:
-                writer = csv.writer(
-                    file,
-                    escapechar='\\',
-                    lineterminator='\n',
-                    quoting=csv.QUOTE_NONE
-                )
-                writer.writerow(
-                    ['time till done', 'interval', 'probes', 'cost', 'probes', 'cost', 'probes', 'cost', 'probes',
-                     'cost', 'probes', 'cost'])
-                for row_key, row_value in self.cost_table.items():
-                    writer.writerow(row_key[1:-1].split(', ') + [x for cell in row_value.items() for x in cell])
 
         self.time += self.computation_rate
 
         # Predict best probe combination
-        comb = genetic.search(
-            time=self.time,
-            approximation=self.approximation,
-            cost_table=self.cost_table,
-            m_tops=self.m_tops,
-            bounds=self.bounds,
-            alert_costs=self.alert_costs,
-            decay_unit=self.decay_unit,
-            pb_neg=self.pb_neg,
-            m_flips=self.m_flips
-        )[0]
+        comb = [int(z) for x in self.appr for y in self.cost_table[str((self.time, ('(' if x[0][1] else '[') + str(float(x[0][0])) + '..' + str(float(x[1][0])) + (']' if x[1][1] else ')')))] for z in ' '.split(y)]
         self.result = [(10, 3, index) for index, x in enumerate(comb) if x]
         return self
 class BatchSolution:
     def __init__(
             self,
-            approximation: Interval,
+            appr: Interval,
             bounds: tuple,
 
             input_source,
 
             location: int
     ):
-        self.approximation: Interval = approximation
+        self.appr: Interval = appr
         self.bounds: tuple = bounds
 
         self.input_source = input_source
@@ -183,7 +195,7 @@ class BatchSolution:
 
         self.graph: Graph = Graph(
                 node=Node(
-                    label=str(approximation)
+                    label=str(appr)
                 )
             )
         self.batches: list = []
@@ -197,7 +209,7 @@ class BatchSolution:
         csv_content += [self.location]
         csv_content += [self.timestamp]
         csv_content += [self.cost]
-        csv_content += [self.approximation]
+        csv_content += [self.appr]
 
         # Environment
         csv_content += [self.true_value]
@@ -254,7 +266,7 @@ class BatchSolution:
         ]
         # Generate result if batch is not empty
         if len(batch) > 0:
-            snapshot = Interval(self.approximation[:])
+            snapshot = Interval(self.appr[:])
 
             self.cost = sum(x for x, _, _ in formula.result)
             interval = Interval([])
@@ -269,13 +281,13 @@ class BatchSolution:
                         (lower_bounds, (location - imprecision, False)),
                         ((location + imprecision, True), upper_bounds)
                     ]
-                self.approximation &= interval
+                self.appr &= interval
 
             # Update state
             self.graph += [
                 Hyperedge(
                     sources=[interval],
-                    targets=[x for x in self.approximation if x in interval],
+                    targets=[x for x in self.appr if x in interval],
                     weight=self.cost,
                     label=str(batch)
                 ) for interval in snapshot
@@ -287,7 +299,7 @@ class BatchSolution:
         return self
 
 def search(
-        approximation: Interval,
+        appr: Interval,
         bounds: tuple,
 
         alert_costs: list,
@@ -295,14 +307,22 @@ def search(
         input_source,
 
         computation_rate: int,
-        pb_neg: float,
+        m_stagnation: float,
         m_flips: int,
+
+        n_pool: int,
         m_tops: int,
+        n_sel: int,
+        n_precisions: list,
+        n_costs: dict,
+
+        k_mat: float,
+        k_mut: float,
 
         location: int
 ):
     solution = BatchSolution(
-        approximation=approximation,
+        appr=appr,
         bounds=bounds,
 
         input_source=input_source,
@@ -314,20 +334,28 @@ def search(
         decay_unit=decay_unit
     )
     formula = DynamicGeneticFormula(
-        approximation=approximation,
+        appr=appr,
         bounds=bounds,
 
         alert_costs=alert_costs,
         decay_unit=decay_unit,
 
         computation_rate=computation_rate,
-        pb_neg=pb_neg,
+        m_stagnation=m_stagnation,
         m_flips=m_flips,
-        m_tops=m_tops
+
+        n_pool=n_pool,
+        m_tops=m_tops,
+        n_sel=n_sel,
+        n_precisions=n_precisions,
+        n_costs=n_costs,
+
+        k_mat=k_mat,
+        k_mut=k_mut
     )
 
     while True:
-        yield str(solution)
+        #yield str(solution)
 
         problem += solution
         formula += problem

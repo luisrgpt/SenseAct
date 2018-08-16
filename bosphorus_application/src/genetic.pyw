@@ -1,181 +1,273 @@
 # coding=utf-8
-from intervals import Interval
-from random import random, randint, randrange
+from intervals import Interval, random_interval
+from random import random, randint, randrange, choice
 
 def generate(
-        approximation: Interval,
-        bounds: tuple,
+        useful_probes_range: Interval,
         n_genes: int,
-        pb_gen:float
+        n_initial_probes: int,
+        n_useful_probes: int
 ):
+    pb_gen = n_initial_probes / n_useful_probes
     return [
-        bounds[0][0] + 3 <= x <= bounds[1][0] - 3 and x in approximation and random() < pb_gen
+        x in useful_probes_range and random() < pb_gen
         for x in range(n_genes)
     ]
 def evaluate(
         time: int,
-        approximation: Interval,
+        appr: tuple,
+        n_appr: int,
         cost_table: dict,
+        n_pool: int,
         m_tops: int,
+        n_sel: int,
         bounds: tuple,
         alert_costs: list,
         decay_unit: tuple,
         m_flips: int,
-        pb_neg: float,
-        comb: list
-):
-    #length = len([x for x in comb if x])
-    #if length > 2:
-    #    print(length)
-    (o_lower, o_open), (o_upper, o_closed) = decay_unit
-    minus_1 = time - 1
-    n_interval = approximation.size()
-    n_comb = len(comb)
+        m_stagnation: float,
+        nucleus: list,
+        n_precisions: list,
+        n_costs: dict,
+        n_genes: int,
 
-    no = Interval(approximation[:])
+        k_mat: float,
+        k_mut: float
+):
+    (d_lower, d_open), (d_upper, d_closed) = decay_unit
+    minus_1 = time - 1
+    no = Interval([appr])
     no_prob = 1
 
-    yes = Interval([((0, False), (0, True))])
+    probes = [(x, i) for i, comb in nucleus for x in range(max(appr[0][0] - i, bounds[0][0]), min(appr[1][0] + i + 1, bounds[1][0])) if comb[x]]
+    probes.sort(key=lambda x: x[0] - x[1])
 
-    total_cost = sum(10 for x in comb if x)
-    if n_interval is not 0:
-        for i, positive in enumerate(comb):
-            if not positive:
+    probe_cost = 0
+    groups = []
+    intersection_groups = []
+    for x, i in probes:
+        probe_cost += n_costs[i]
+
+        in_groups = False
+        x_l = x - i
+        x_h = x + i
+        for y in range(len(groups)):
+            endpoints = groups[y]
+            l = 1
+
+            if x_l < endpoints[0]:
+                #print(str(x_l) + ' ' + str(intersection_groups) + ' ' + str(groups), end='')
+                groups[y][:0] += [x_l]
+                intersection_groups[y][:0] += [0]
+                in_groups = True
+                #print(' <0< ' + str(intersection_groups) + ' ' + str(groups), end='')
+
+            elif x_l == endpoints[0]:
+                #print(str(x_l) + ' ' + str(intersection_groups) + ' ' + str(groups), end='')
+                in_groups = True
+                #print(' =0= ' + str(intersection_groups) + ' ' + str(groups), end='')
+
+            elif endpoints[0] < x_l < endpoints[1]:
+                #print(str(x_l) + ' ' + str(intersection_groups) + ' ' + str(groups), end='')
+                groups[y][0:1] += [x_l]
+                intersection_groups[y] += [intersection_groups[y][0]]
+                in_groups = True
+                #print(' >0> ' + str(intersection_groups) + ' ' + str(groups), end='')
+
+            elif endpoints[-1] == x_l:
+                #print(str(x_l) + ' ' + str(intersection_groups) + ' ' + str(groups), end='')
+                groups[y] += [x_l]
+                intersection_groups[y] += [intersection_groups[y][-1]]
+                in_groups = True
+                #print(' =-1= ' + str(intersection_groups) + ' ' + str(groups), end='')
+
+            else:
+                for z in range(1, len(endpoints) - 1):
+                    l += 1
+
+                    if endpoints[z] == x_l:
+                        #print(str(x_l) + ' ' + str(intersection_groups) + ' ' + str(groups), end='')
+                        groups[y][z - 1:z] += [x_l]
+                        intersection_groups[y][z - 1:z] += [intersection_groups[y][z]]
+                        in_groups = True
+                        #print(' = ' + str(intersection_groups) + ' ' + str(groups), end='')
+                        break
+
+                    elif endpoints[z] < x_l < endpoints[z + 1]:
+                        #print(str(x_l) + ' ' + str(intersection_groups) + ' ' + str(groups), end='')
+                        groups[y][z:z + 1] += [x_l]
+                        intersection_groups[y][z - 1:z] += [intersection_groups[y][z]]
+                        in_groups = True
+                        #print(' > ' + str(intersection_groups) + ' ' + str(groups), end='')
+                        break
+
+            #print(l)
+            if in_groups:
+                for z in range(l, len(endpoints)):
+                    if x_h < endpoints[z]:
+                        groups[y][z - 1:z] += [x_h]
+                        intersection_groups[y][z - 2:z - 1] += [intersection_groups[y][z - 1]]
+                        intersection_groups[y][z - 1] += 1
+                        #print(' -<> ' + str(intersection_groups) + ' ' + str(groups), end='')
+                        break
+
+                    elif x_h == endpoints[z]:
+                        groups[y][z - 1:z] += [x_h]
+                        intersection_groups[y][z - 2:z - 1] += [intersection_groups[y][z - 1]]
+                        intersection_groups[y][z - 1] += 1
+                        intersection_groups[y][z] += 2
+                        #print(' -==> ' + str(intersection_groups) + ' ' + str(groups), end='')
+                        break
+
+                    else:
+                        if z == len(endpoints) - 1:
+                            groups[y] += [x_h]
+                            intersection_groups[y][z - 1] += 1
+                            intersection_groups[y] += [0]
+                            #print(' ->> ' + str(intersection_groups) + ' ' + str(groups), end='')
+                break
+
+        if not in_groups:
+            groups += [[x_l, x_h]]
+            intersection_groups += [[0]]
+            #print(str(x_l) + ' new ' + str(intersection_groups) + ' ' + str(groups), end='')
+
+        #print('')
+    total_cost = probe_cost
+
+    for endpoints, intersections in zip(groups, intersection_groups):
+        for x in range(len(endpoints) - 1):
+            yes = (
+                (endpoints[x], x == 0 or intersections[x - 1] < intersections[x]),
+                (endpoints[x + 1], x < len(endpoints) - 2 and intersections[x] < intersections[x + 1])
+            )
+            if (yes if yes[0] <= appr[0] else appr)[1] <= (yes if appr[1] <= yes[1] else appr)[0]:
                 continue
-            lower_offset = max(0, i - 6)
-            upper_offset = min(i + 1, n_comb)
-            upper_value = min(i + 6, n_comb)
-            lower_value = max(
-                [i - 3] +
-                [
-                    lower_offset + j + 3
-                    for j, x in enumerate(comb[lower_offset:i])
-                    if x
-                ]
+
+            appr_yes = (max(yes[0], appr[0]), min(yes[1], appr[1]))
+            yes_prob = (appr_yes[1][0] - appr_yes[0][0]) / n_appr
+            if yes_prob == 0:
+                continue
+
+            no.remove(appr_yes)
+            alert_cost = 0
+            for x, cost in alert_costs:
+                if alert_cost < cost and (appr_yes if x[1] <= appr_yes[1] else x)[0] < (appr_yes if appr_yes[0] <= x[0] else x)[1]:
+                    alert_cost = cost
+
+            delayed_yes = (
+                (appr_yes[0][0] + d_lower, appr_yes[0][1] or d_open),
+                (appr_yes[1][0] + d_upper, appr_yes[1][1] and d_closed)
             )
-            endpoints = (
-                [
-                    upper_offset + j - 3
-                    for j, x in enumerate(comb[upper_offset:upper_value])
-                    if x and upper_offset + j - 3 >= lower_value
-                ] +
-                [i + 3]
-            )
-            #print(str(lower_value) + ".." + str(upper_values))
-            yes[0] = ((lower_value, lower_value != i - 3), yes[0][1])
-            for endpoint in endpoints:
-                yes[0] = (yes[0][0], (endpoint, endpoint == i + 3))
-                if not(yes[0][0][0] == yes[0][1][0] and yes[0][0][1] and not yes[0][1][1]) and yes in approximation:
-                    yes &= approximation
-                    no &= ~yes
+            bounded_yes = (max(delayed_yes[0], bounds[0]), min(delayed_yes[1], bounds[1]))
+            if str((minus_1, bounded_yes)) not in cost_table:
+                search(
+                    time=minus_1,
+                    appr=bounded_yes,
+                    cost_table=cost_table,
+                    n_pool=n_pool,
+                    m_tops=m_tops,
+                    n_sel=n_sel,
+                    bounds=bounds,
+                    alert_costs=alert_costs,
+                    decay_unit=decay_unit,
+                    m_stagnation=m_stagnation,
+                    m_flips=m_flips,
+                    n_precisions=n_precisions,
+                    n_costs=n_costs,
+                    k_mat=k_mat,
+                    k_mut=k_mut
+                )
 
-                    for x in yes:
-                        #print(x)
-                        yes_prob = (x[1][0] - x[0][0]) / n_interval
+            wait_cost = min(cost_table[str((minus_1, bounded_yes))].values())
+            total_cost += yes_prob * (alert_cost + wait_cost)
+            no_prob -= yes_prob
 
-                        alert_cost = 0
-                        for y, cost in alert_costs:
-                            if (x if y[1] <= x[1] else y)[0] < (x if x[0] <= y[0] else y)[1]:
-                                alert_cost = cost
-
-                        x = ((x[0][0] + o_lower, x[0][1] or o_open), (x[1][0] + o_upper, x[1][1] and o_closed))
-                        x = (max(x[0], bounds[0]), min(x[1], bounds[1]))
-
-                        if str((minus_1, Interval([x]))) not in cost_table:
-                            top5 = search(
-                                time=minus_1,
-                                approximation=Interval([x]),
-                                cost_table=cost_table,
-                                m_tops=m_tops,
-                                bounds=bounds,
-                                alert_costs=alert_costs,
-                                decay_unit=decay_unit,
-                                pb_neg=pb_neg,
-                                m_flips=m_flips
-                            )
-                            cost_table[str((minus_1, Interval([x])))] = {
-                                str(' '.join([str(index) for index, y in enumerate(comb) if y])):
-                                    evaluate(
-                                        time=minus_1,
-                                        approximation=Interval([x]),
-                                        cost_table=cost_table,
-                                        m_tops=m_tops,
-                                        bounds=bounds,
-                                        alert_costs=alert_costs,
-                                        decay_unit=decay_unit,
-                                        pb_neg=pb_neg,
-                                        m_flips=m_flips,
-                                        comb=comb
-                                    )
-                                for comb in top5
-                            }
-
-                        wait_cost = min(cost_table[str((minus_1, Interval([x])))].values())
-                        if minus_1 is 1:
-                            print("no : " + str((minus_1, Interval([x]))) + " -> " + str(alert_cost) + " + " + str(wait_cost))
-
-                        total_cost += yes_prob * (alert_cost + wait_cost)
-                        no_prob -= yes_prob
-
-                    yes[0] = ((yes[0][0][0], False), yes[0][1])
-                    del yes[1:]
-                yes[0] = ((endpoint, yes[0][0][1]), yes[0][1])
     alert_cost = 0
     wait_cost = 0
-    #print(no)
     for x in no:
         for y, cost in alert_costs:
             if alert_cost < cost and (x if y[1] <= x[1] else y)[0] < (x if x[0] <= y[0] else y)[1]:
                 alert_cost = cost
 
-        x = ((x[0][0] + o_lower, x[0][1] or o_open), (x[1][0] + o_upper, x[1][1] and o_closed))
-        x = (max(x[0], bounds[0]), min(x[1], bounds[1]))
-
-        if str((minus_1, Interval([x]))) not in cost_table:
-            top5 = search(
+        delayed_x = ((x[0][0] + d_lower, x[0][1] or d_open), (x[1][0] + d_upper, x[1][1] and d_closed))
+        bounded_x = (max(delayed_x[0], bounds[0]), min(delayed_x[1], bounds[1]))
+        if str((minus_1, bounded_x)) not in cost_table:
+            search(
                 time=minus_1,
-                approximation=Interval([x]),
+                appr=bounded_x,
                 cost_table=cost_table,
+                n_pool=n_pool,
                 m_tops=m_tops,
+                n_sel=n_sel,
                 bounds=bounds,
                 alert_costs=alert_costs,
                 decay_unit=decay_unit,
-                pb_neg=pb_neg,
-                m_flips=m_flips
+                m_stagnation=m_stagnation,
+                m_flips=m_flips,
+                n_precisions=n_precisions,
+                n_costs=n_costs,
+                k_mat=k_mat,
+                k_mut=k_mut
             )
-            cost_table[str((minus_1, Interval([x])))] = {
-                str(' '.join([str(index) for index, y in enumerate(comb) if y])):
-                    evaluate(
-                        time=minus_1,
-                        approximation=Interval([x]),
-                        cost_table=cost_table,
-                        m_tops=m_tops,
-                        bounds=bounds,
-                        alert_costs=alert_costs,
-                        decay_unit=decay_unit,
-                        pb_neg=pb_neg,
-                        m_flips=m_flips,
-                        comb=comb
-                    )
-                for comb in top5
-            }
-
-        wait_cost += min(cost_table[str((minus_1, Interval([x])))].values())
-        if minus_1 is 1:
-            print("no : " + str((minus_1, Interval([x]))) + " -> " + str(alert_cost) + " + " + str(wait_cost))
+        wait_cost += min(cost_table[str((minus_1, bounded_x))].values())
     total_cost += no_prob * (alert_cost + wait_cost)
+
+    # Debug
+    # if total_cost > 0 and len(groups) is not 0:
+    # # if len(groups) is not 0:
+    #     print('')
+    #     print('appr: ' + str(appr))
+    #     print('pro: ' + str(probe_cost))
+    #     print(','.join([str(u) + '(' + ' '.join([str(pos) for pos, cond in enumerate(comb) if cond]) + ')' for u, comb in nucleus]) + ' ' + ' '.join([str(endpoints[0]) + '..' + ','.join([str(x) for x in endpoints[1:]]) for endpoints in groups]))
+    #     no = Interval([appr])
+    #     # print(no, end='')
+    #     for endpoints, intersections in zip(groups, intersection_groups):
+    #         for x in range(len(endpoints) - 1):
+    #             yes = (
+    #                 (endpoints[x], x == 0 or intersections[x - 1] < intersections[x]),
+    #                 (endpoints[x + 1], x < len(endpoints) - 2 and intersections[x] < intersections[x + 1])
+    #             )
+    #             if (yes if yes[0] <= appr[0] else appr)[1] <= (yes if appr[1] <= yes[1] else appr)[0]:
+    #                 print(','.join([str(u) + '(' + ' '.join([str(pos) for pos, cond in enumerate(comb) if cond]) + ')' for u, comb in nucleus]) + ' yes: ' + str(
+    #                     (time, Interval([yes]))) + ' -> ' + str(
+    #                     (time, Interval([]))) + ' -> 0')
+    #                 continue
+    #             appr_yes = (max(yes[0], appr[0]), min(yes[1], appr[1]))
+    #             no.remove(yes)
+    #             yes_prob = (appr_yes[1][0] - appr_yes[0][0]) / n_appr
+    #             if yes_prob == 0:
+    #                 print(','.join([str(u) + '(' + ' '.join([str(pos) for pos, cond in enumerate(comb) if cond]) + ')' for u, comb in nucleus]) + ' yes: ' + str(
+    #                     (time, Interval([yes]))) + ' -> ' + str(
+    #                     (time, Interval([appr_yes]))) + ' -> 0', end='')
+    #                 print(' ------------------- no : ' + str(no))
+    #                 continue
+    #             y_alert_cost = 0
+    #             for x, cost in alert_costs:
+    #                 if y_alert_cost < cost and (appr_yes if x[1] <= appr_yes[1] else x)[0] < \
+    #                         (appr_yes if appr_yes[0] <= x[0] else x)[1]:
+    #                     y_alert_cost = cost
+    #             delayed_x = ((appr_yes[0][0] + d_lower, appr_yes[0][1] or d_open), (appr_yes[1][0] + d_upper, appr_yes[1][1] and d_closed))
+    #             bounded_x = (max(delayed_x[0], bounds[0]), min(delayed_x[1], bounds[1]))
+    #             wait_cost = min(cost_table[str((minus_1, bounded_x))].values())
+    #             print(','.join([str(u) + '(' + ' '.join([str(pos) for pos, cond in enumerate(comb) if cond]) + ')' for u, comb in nucleus]) + ' yes: ' + str(
+    #                 (time, Interval([yes]))) + ' -> cost-table(' + str(
+    #                 (minus_1, Interval([bounded_x]))) + ') -> (' + str(y_alert_cost) + ' + ' + str(
+    #                 wait_cost) + ') * (' + str(int(yes_prob * n_appr)) + ' / ' + str(n_appr) + ') = ' + str(
+    #                 yes_prob * (y_alert_cost + wait_cost)), end='')
+    #             print(' ------------------- no : ' + str(no))
+    #             # print(' - [' + str(l) + '..' + str(h) + '] -> ' + str(no), end='')
+    #     # print(' -> ' + str(no))
+    #     print(','.join([str(u) + '(' + ' '.join([str(pos) for pos, cond in enumerate(comb) if cond]) + ')' for u, comb in nucleus]) + ' no : ' + str((time, no)) + ' -> cost-table(' + str((minus_1, no + decay_unit)) + ') -> (' + str(alert_cost) + ' + ' + str(wait_cost) + ') * (' + str(int(no_prob * n_appr))  + ' / ' + str(n_appr) + ') = ' + str(no_prob * (alert_cost + wait_cost)))
 
     return total_cost
 def mate(
         chromosome_1: list,
         chromosome_2: list
 ):
-    chromosome_1 = [x for x in chromosome_1]
-    chromosome_2 = [x for x in chromosome_2]
-
     # Check if both chromosomes are identical
     if chromosome_1 == chromosome_2:
-        return chromosome_1, chromosome_2
+        return
 
     # Identify first difference
     min_point = None
@@ -191,161 +283,218 @@ def mate(
 
     # Check if both chromosomes differ at one and only one gene
     if min_point == max_point:
-        return chromosome_1, chromosome_2
+        return
 
     cx_point = randint(min_point, max_point)
     chromosome_1[cx_point:], chromosome_2[cx_point:] = chromosome_2[cx_point:], chromosome_1[cx_point:]
-
-    return chromosome_1, chromosome_2
 def mutate(
-        chromosome: list,
-        n_genes: int,
-        approximation: Interval,
-        pb_neg: float,
+        nucleus: list,
+        useful_probes_range: dict,
+        n_appr: int,
         m_flips: int
 ):
-    chromosome = [x for x in chromosome]
-
-    flip_signal = pb_neg < random()
-    # Cannot flip bits to false if there are no true's
-    if sum(1 for x in chromosome if x) is 0 and not flip_signal:
-        return chromosome
+    n_probes = sum(1 for _, chromosome in nucleus for x in chromosome if x)
 
     # Assuming m_flips is always greater than 0
-    n_flips = randint(1, m_flips)
-    if flip_signal:
-        # For each number of flips
-        for _ in range(n_flips):
-            # Repeat until gene is the opposite of its flip
-            x = randrange(n_genes)
-            while chromosome[x] == flip_signal and x in approximation:
-                x = randrange(n_genes)
-            # Flip value
-            chromosome[x] = not chromosome[x]
-    else:
-        # For each number of flips
-        for _ in range(n_flips):
-            # Repeat until gene is the opposite of its flip
-            x = randrange(n_genes)
-            while chromosome[x] == flip_signal:
-                if sum(1 for x in chromosome if x) is 0:
-                    return chromosome
-                x = randrange(n_genes)
-            # Flip value
-            chromosome[x] = not chromosome[x]
+    if n_probes/n_appr * 1.1 < random():
+        probes = [(k, pos, u) for k, (u, chromosome) in enumerate(nucleus) for pos, cond in enumerate(chromosome) if not cond]
 
-    return chromosome
+        # For each number of flips
+        for _ in range(randint(1, m_flips)):
+            # Repeat until gene is false and inside useful probe range
+            x = choice(probes)
+            while x[1] not in useful_probes_range[x[2]]:
+                x = choice(probes)
+            # Flip value
+            nucleus[x[0]][1][x[1]] = True
+    else:
+        probes = [(k, pos) for k, (_, chromosome) in enumerate(nucleus) for pos, cond in enumerate(chromosome) if cond]
+
+        # For each number of flips
+        for _ in range(randint(1, m_flips)):
+            if n_probes is 0:
+                break
+            n_probes -= 1
+            x = choice(probes)
+            probes.remove(x)
+            # Flip value
+            nucleus[x[0]][1][x[1]] = False
 def search(
         time: int,
-        approximation: Interval,
+        appr: tuple,
         cost_table: dict,
+        n_pool: int,
         m_tops: int,
+        n_sel: int,
         bounds: tuple,
         alert_costs: list,
         decay_unit: tuple,
         m_flips: int,
-        pb_neg: float
+        m_stagnation: float,
+        n_precisions: list,
+        n_costs: dict,
+
+        k_mat: float,
+        k_mut: float
 ):
-    elite = [
-        y
-        for x in approximation
-        if str((time - 1, x)) in cost_table
-        for y in cost_table[str((time - 1, x))].values()
-    ]
-
+    #elite = [
+    #    y
+    #    for x in appr
+    #    for y in cost_table[str((time - 1, x))].values()
+    #]
+    # Genetic search is useless if the appr is degenerated
     n_genes = (bounds[1][0] - bounds[0][0]) + 1
-    n_pool = approximation.size()
-    # Genetic search is useless if the approximation is degenerated
-    if n_pool is 0:
-        return [[False] * n_genes]
 
-    pb_gen = 1 / n_pool
-    n_gen = int(n_pool / 10) + 1
+    useful_probes_range = Interval([x for x, _ in alert_costs])
+    useful_probes_range &= Interval([appr])
 
-    #print("bounds: " + str(n_genes) + " size: " + str(n_pool) + " pb: " + str(pb_gen) + " gen: " + str(n_gen))
+    n_appr = appr[1][0] - appr[0][0]
+    if useful_probes_range.size() is 0:
+        cost_table[str((time, appr))] = {'': 0}
+        return
+
+    i_bounds = Interval([bounds])
+
+    useful_probes_range = {u: (useful_probes_range + ((-u, False), (u, True))) & i_bounds for u, _ in n_precisions}
+    n_useful_probes = {u: useful_probes_range[u].size() + len(useful_probes_range[u])  for u, _ in n_precisions}
 
     # Generate and evaluate
-    pool = [generate(approximation, bounds, n_genes, pb_gen) for _ in range(n_pool - len(elite))] + elite
+    pool = [[(u, generate(useful_probes_range[u], n_genes, n, n_useful_probes[u])) for u, n in n_precisions] for _ in range(n_pool)] + [[(u, [False] * n_genes) for u, _ in n_precisions]]
     fitness = [
         evaluate(
             time=time,
-            approximation=approximation,
+            appr=appr,
+            n_appr=n_appr,
             cost_table=cost_table,
+            n_pool=n_pool,
             m_tops=m_tops,
+            n_sel=n_sel,
             bounds=bounds,
             alert_costs=alert_costs,
             decay_unit=decay_unit,
-            pb_neg=pb_neg,
+            m_stagnation=m_stagnation,
             m_flips=m_flips,
-            comb=x
+            nucleus=nucleus,
+            n_precisions=n_precisions,
+            n_costs=n_costs,
+            n_genes=n_genes,
+            k_mat=k_mat,
+            k_mut=k_mut
         )
-        for x in pool
+        for nucleus in pool
     ]
-    for _ in range(n_gen):
-        # Mate, mutate and evaluate
-        pool += [x for even, odd in zip(pool[::2], pool[1::2]) for x in mate(even, odd)]
-        pool += [mutate(x, n_genes, approximation, pb_neg, m_flips) for x in pool]
-        fitness += [
+
+    # Select
+    pool = [pool[x[0]] for x in sorted(enumerate(fitness), key=lambda x: x[1])]
+    fitness.sort()
+
+    # Update test
+    prev_best = fitness[0]
+    stagnation_counter = 0
+    n_nucleus = len(n_precisions)
+
+    # Test
+    while stagnation_counter < m_stagnation:
+        # Mate and accepting new offspring
+        for x in range(n_sel + 1, n_pool - 1, 2):
+            for y in range(n_nucleus):
+                if random() < k_mat * x / n_pool:
+                    mate(pool[x][y][1], pool[x + 1][y][1])
+
+        # Mutate and accepting new offspring
+        for x in range(n_sel + 1, n_pool):
+            if random() < k_mut * x / n_pool:
+                mutate(pool[x], useful_probes_range, n_appr, m_flips)
+
+        # Evaluate
+        fitness = [
             evaluate(
                 time=time,
-                approximation=approximation,
+                appr=appr,
+                n_appr=n_appr,
                 cost_table=cost_table,
+                n_pool=n_pool,
                 m_tops=m_tops,
+                n_sel=n_sel,
                 bounds=bounds,
                 alert_costs=alert_costs,
                 decay_unit=decay_unit,
-                pb_neg=pb_neg,
+                m_stagnation=m_stagnation,
                 m_flips=m_flips,
-                comb=x
+                nucleus=nucleus,
+                n_precisions=n_precisions,
+                n_costs=n_costs,
+                n_genes=n_genes,
+                k_mat=k_mat,
+                k_mut=k_mut
             )
-            for x in pool
+            for nucleus in pool
         ]
+
         # Select
-        pool = [x for _, x in sorted(zip(fitness, pool))][:n_pool]
-        fitness = [x for x in sorted(fitness)][:n_pool]
-    # Return top N
-    return pool[:m_tops]
+        pool = [pool[x[0]] for x in sorted(enumerate(fitness), key=lambda x: x[1])]
+        fitness.sort()
+
+        # Update test
+        next_best = fitness[0]
+        if prev_best == next_best:
+            stagnation_counter += 1
+        else:
+            stagnation_counter = 0
+        prev_best = next_best
+        #print('')
+
+    cost_table[str((time, appr))] = {
+        ' '.join([str(u) + '(' + ' '.join([str(pos) for pos, cond in enumerate(comb) if cond]) + ')' for u, comb in nucleus]): fit
+        for nucleus, fit in zip(pool[:m_tops], fitness[:m_tops])
+    }
 
 def test():
+    import time as timer
     from submarine import Parameters
 
     time = 1
-    set_of_probes = [37]
-    approximation = Interval([((16, True), (40, True))])
+    appr = ((0, False), (46, False)) # [0..46)
+    n_appr = appr[1][0] - appr[0][0]
 
     cost_table = {
-        str((0, x)): {"": 0}
+        str((0, x)): {'': 0}
         for x in Interval([Parameters.bounds]).range()
     }
-    comb = [False] * (Interval([Parameters.bounds]).size() + 1)
-    for pos in set_of_probes:
-        comb[pos] = True
+    nucleus = [(3, [False] * (Interval([Parameters.bounds]).size() + 1)), (5, [False] * (Interval([Parameters.bounds]).size() + 1))]
+    for pos in []:
+        nucleus[0][1][pos] = True
+    for pos in [35, 43, 50]:
+        nucleus[1][1][pos] = True
 
+    n_genes = (Parameters.bounds[1][0] - Parameters.bounds[0][0]) + 1
+
+    print('Initial settings: ' + Parameters.__repr__())
+    print('appr: ' + str(appr))
+    print('k time minus: ' + str(time))
+    print('Set of probes: ' + ' , '.join([str(Interval([((x - 5 ,True), (x + 5,False))])) for x in [35, 43, 50]]))
+
+    start = timer.time()
     print(evaluate(
         time=time,
-        approximation=approximation,
+        appr=appr,
+        n_appr=n_appr,
         cost_table=cost_table,
+        n_pool=Parameters.n_pool,
         m_tops=Parameters.m_tops,
+        n_sel=Parameters.n_sel,
         bounds=Parameters.bounds,
         alert_costs=Parameters.alert_costs,
         decay_unit=Parameters.decay_unit,
-        pb_neg=Parameters.pb_neg,
+        m_stagnation=Parameters.m_stagnation,
         m_flips=Parameters.m_flips,
-        comb=comb
+        nucleus=nucleus,
+        n_precisions=Parameters.n_precisions,
+        n_costs=Parameters.n_costs,
+        n_genes=n_genes,
+        k_mat=Parameters.k_mat,
+        k_mut=Parameters.k_mut
     ))
+    end = timer.time()
+    print(end - start)
 
-    #while True:
-    #    search(
-    #        time=1,
-    #        approximation=approximation,
-    #        cost_table=cost_table,
-    #        m_tops=5,
-    #        bounds=bounds
-    #    )
-    #    print(
-    #        '\n'.join([
-    #            str(rank) + '-> ' + ' '.join([str(index) for index, x in enumerate(comb) if x]) + ': ' +
-    # str(evaluate(1, approximation, comb, cost_table, bounds))
-    #            for rank, comb in enumerate(elites[str(approximation)])
-    #        ])
-    #    )

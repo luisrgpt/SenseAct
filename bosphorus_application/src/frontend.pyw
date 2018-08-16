@@ -16,8 +16,8 @@ class Handler:
         Handler.app = app
     def __iadd__(self, message):
         if isinstance(message, tuple):
-            message = "\n".join(message)
-        message = "\n" + message + "\n"
+            message = '\n'.join(message)
+        message = '\n' + message + '\n'
 
         Protocol.transport.write(
             data=message.encode('utf8')

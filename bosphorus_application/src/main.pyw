@@ -5,26 +5,26 @@ from frontend import Handler
 from backend import search
 
 #from intervals import test
-from genetic import test
-test()
+#from genetic import test
+#test()
 
 from submarine import Parameters
 #from forest_fires import Parameters
 
 def init_output():
-    print("init")
+    print('init')
     global frontend
     frontend.start()
 def start_output():
-    print("start")
+    print('start')
     global frontend
     frontend += 'reset', 'next', 'play', 'reset'
 def start_play_output():
-    print("start play")
+    print('start play')
     global frontend, backend
     del backend
     backend = search(
-        approximation=Parameters.approximation,
+        appr=Parameters.appr,
         bounds=Parameters.bounds,
 
         alert_costs=Parameters.alert_costs,
@@ -32,25 +32,33 @@ def start_play_output():
         decay_unit=Parameters.decay_unit,
         input_source=Parameters.method(Parameters.argument),
 
-        pb_neg=Parameters.pb_neg,
+        m_stagnation=Parameters.m_stagnation,
         m_flips=Parameters.m_flips,
+
+        n_pool=Parameters.n_pool,
         m_tops=Parameters.m_tops,
+        n_sel=Parameters.n_sel,
+        n_precisions=Parameters.n_precisions,
+        n_costs=Parameters.n_costs,
+
+        k_mat=Parameters.k_mat,
+        k_mut=Parameters.k_mut,
 
         location=Parameters.backend_location
     )
     frontend += 'reset'
     return 'start_play_input'
 def first_play_output():
-    print("start play")
+    print('start play')
     global frontend
     frontend += 'pause', 'stop', 'repeat-all'
     return 'first_play_input'
 def start_next_output():
-    print("start next")
+    print('start next')
     global frontend, backend
     del backend
     backend = search(
-        approximation=Parameters.approximation,
+        appr=Parameters.appr,
         bounds=Parameters.bounds,
 
         alert_costs=Parameters.alert_costs,
@@ -58,45 +66,53 @@ def start_next_output():
         decay_unit=Parameters.decay_unit,
         input_source=Parameters.method(Parameters.argument),
 
-        pb_neg=Parameters.pb_neg,
+        m_stagnation=Parameters.m_stagnation,
         m_flips=Parameters.m_flips,
+
+        n_pool=Parameters.n_pool,
         m_tops=Parameters.m_tops,
+        n_sel=Parameters.n_sel,
+        n_precisions=Parameters.n_precisions,
+        n_costs=Parameters.n_costs,
+
+        k_mat=Parameters.k_mat,
+        k_mut=Parameters.k_mut,
 
         location=Parameters.backend_location
     )
     frontend += 'reset', next(backend)
 def ack_play_output():
-    print("ack play")
+    print('ack play')
 def ack_next_output():
-    print("ack next")
+    print('ack next')
 def play_output():
-    print("play")
+    print('play')
     global frontend
     frontend += next(backend)
     return 'wait_input'
 def next_output():
-    print("next")
+    print('next')
     global frontend
     frontend += next(backend)
     return 'wait_input'
 def win_play_output():
-    print("win play")
+    print('win play')
     global frontend
     frontend += 'stop', 'repeat-all'
 def win_next_output():
-    print("win next")
+    print('win next')
     global frontend
     frontend += 'stop', 'repeat-all'
 def lose_play_output():
-    print("lose play")
+    print('lose play')
     global frontend
     frontend += 'stop', 'repeat-all'
 def lose_next_output():
-    print("lose next")
+    print('lose next')
     global frontend
     frontend += 'stop', 'repeat-all'
 def pause_output():
-    print("pause")
+    print('pause')
     global frontend
     frontend += 'previous', 'next', 'play', 'stop', 'repeat-all'
 def quit_output():
@@ -186,7 +202,7 @@ app = Automaton(
     }
 )
 backend = search(
-    approximation=Parameters.approximation,
+    appr=Parameters.appr,
     bounds=Parameters.bounds,
 
     alert_costs=Parameters.alert_costs,
@@ -194,9 +210,16 @@ backend = search(
     decay_unit=Parameters.decay_unit,
     input_source=Parameters.method(Parameters.argument),
 
-    pb_neg=Parameters.pb_neg,
+    m_stagnation=Parameters.m_stagnation,
     m_flips=Parameters.m_flips,
+    n_pool=Parameters.n_pool,
     m_tops=Parameters.m_tops,
+    n_sel=Parameters.n_sel,
+    n_precisions=Parameters.n_precisions,
+    n_costs=Parameters.n_costs,
+
+    k_mat=Parameters.k_mat,
+    k_mut=Parameters.k_mut,
 
     location=Parameters.backend_location
 )

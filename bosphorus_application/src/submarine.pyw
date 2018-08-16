@@ -9,7 +9,7 @@ class Parameters:
     red_cost = 1000
     yellow_cost = 50
 
-    approximation = Interval([((0, False), (100, True))])
+    appr = Interval([((0, False), (100, True))])
     bounds = ((0, False), (100, True))
 
     alert_costs = [(red_interval, red_cost), (yellow_interval, yellow_cost)]
@@ -30,8 +30,28 @@ class Parameters:
             location = location + normalized_vector
     argument = randint(0, 100)
 
-    pb_neg = 0.7
-    m_flips = 2
+    m_stagnation = 10
+    m_flips = 1
+
+    n_pool = 100
     m_tops = 5
+    n_sel = 2
+    n_precisions = [
+        (3, 0),
+        (5, 1)
+    ]
+    n_costs = {3: 10, 5: 1}
+
+    k_mat = 0.1
+    k_mut = 0.1
 
     backend_location = 0
+
+    @classmethod
+    def __repr__(cls):
+        return (
+            '{ alerts: ' +
+            str(Interval([cls.red_interval])) + ' -> ' + str(cls.red_cost) + ' , ' +
+            str(Interval([cls.yellow_interval])) + ' -> ' + str(cls.yellow_cost) +
+            '}'
+        )

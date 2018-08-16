@@ -1,5 +1,6 @@
 # coding=utf-8
 from math import inf
+from random import randrange
 
 class Interval:
     def __init__(self, intervals: list):
@@ -31,7 +32,7 @@ class Interval:
             lower, max_upper = x
             upper = (lower[0] + lower[1], not lower[1])
             while upper <= max_upper:
-                yield Interval([(lower, upper)])
+                yield (lower, upper)
                 if upper < max_upper:
                     upper = (upper[0] + upper[1], not upper[1])
                 else:
@@ -148,6 +149,25 @@ class Interval:
                 n_self -= 1
             x += 1
         return self
+    def remove(self, other: tuple):
+        intervals = self.intervals
+        self.intervals = []
+        for x in intervals:
+            lower = (x if other[1] <= x[1] else other)[0]
+            upper = (x if x[0] <= other[0] else other)[1]
+
+            if lower < upper:
+                if x[0] < other[0]:
+                    self.intervals += [
+                        (x[0], other[0])
+                    ]
+                if other[1] < x[1]:
+                    self.intervals += [
+                        (other[1], x[1])
+                    ]
+            else:
+                self.intervals += [x]
+        return self
     def __iadd__(self, other):
         (o_lower, o_open), (o_upper, o_closed) = other
 
@@ -221,6 +241,16 @@ class Interval:
         result |= other
         return result
 
+def random_interval(interval: Interval):
+    r = randrange(interval.size() + len(interval.intervals))
+
+    for x in interval:
+        d = r - x[1][0] - x[0][0] - 1
+        if d < 0:
+            return x[0][0] + r
+        else:
+            r = d
+
 def test():
     for x in Interval([
         ((0, False), (10, True))
@@ -234,6 +264,8 @@ def test():
     l4 = (-inf, None)  # (LOW
     l5 = (1, False)  # [1
     l6 = (1, True)  # (1
+    l7 = (38, True)  # (38
+    l8 = (40, False)  # [40
 
     r0 = (inf, None)  # HIGH)
     r1 = (inf, None)  # HIGH)
@@ -243,6 +275,8 @@ def test():
     r5 = (0, True)  # 0]
     r6 = (0, False)  # 0)
     r7 = (5, True)  # 5]
+    r8 = (41, True)  # 41]
+    r9 = (45, True)  # 45]
 
     i0 = Interval([(l1, r1)])  # (LOW..HIGH)
     i1 = Interval([(l1, r2)])  # (LOW..1]
@@ -257,6 +291,8 @@ def test():
     i10 = Interval([(l1, r6)])  # (LOW..0)
     i11 = Interval([(l6, r1)])  # (1..HIGH)
     i12 = Interval([(l2, r7)])  # [0..5]
+    i13 = Interval([(l7, r8)])  # (38..41]
+    i14 = Interval([(l8, r9)])  # [40..45]
 
     e0 = Interval([])  # ()
     e1 = Interval([((-inf, None),(inf, None))])  # (LOW..HIGH)
@@ -397,3 +433,12 @@ def test():
     print(str(i7) + ' in ' + str(e1) + ' = ' + str(i7 in e1))
     print(str(i7) + ' or ' + str(i11) + ' = ' + str(i7 | i11))
     print(str(e0 | i10 | i11) + ' and ' + str(i12) + ' = ' + str((e0 | i10 | i11) & i12))
+    print(str(i13) + ' and ' + str(i14) + ' = ' + str(i13 & i14))
+    print(i13)
+    i13.remove(i14[0])
+    print(i13)
+
+    while True:
+        r = random_interval(Interval([((0, False), (40, True)), ((60, False), (100, True))]))
+        if 58 < r < 62:
+            print(r)

@@ -10,7 +10,7 @@ class Automaton:
         if input_name not in self.state_transitions:
             return
             # raise AutomatonException(
-            #     "Input " + input_name + " does not apply in state " + self.current_state
+            #     'Input ' + input_name + ' does not apply in state ' + self.current_state
             # )
 
         while input_name is not None:
