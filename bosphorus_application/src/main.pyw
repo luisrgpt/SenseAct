@@ -23,29 +23,7 @@ def start_play_output():
     print('start play')
     global frontend, backend
     del backend
-    backend = search(
-        appr=Parameters.appr,
-        bounds=Parameters.bounds,
-
-        alert_costs=Parameters.alert_costs,
-        computation_rate=Parameters.computation_rate,
-        decay_unit=Parameters.decay_unit,
-        input_source=Parameters.method(Parameters.argument),
-
-        m_stagnation=Parameters.m_stagnation,
-        m_flips=Parameters.m_flips,
-
-        n_pool=Parameters.n_pool,
-        m_tops=Parameters.m_tops,
-        n_sel=Parameters.n_sel,
-        n_precisions=Parameters.n_precisions,
-        n_costs=Parameters.n_costs,
-
-        k_mat=Parameters.k_mat,
-        k_mut=Parameters.k_mut,
-
-        location=Parameters.backend_location
-    )
+    backend = search(use_case=Parameters)
     frontend += 'reset'
     return 'start_play_input'
 def first_play_output():
@@ -57,29 +35,7 @@ def start_next_output():
     print('start next')
     global frontend, backend
     del backend
-    backend = search(
-        appr=Parameters.appr,
-        bounds=Parameters.bounds,
-
-        alert_costs=Parameters.alert_costs,
-        computation_rate=Parameters.computation_rate,
-        decay_unit=Parameters.decay_unit,
-        input_source=Parameters.method(Parameters.argument),
-
-        m_stagnation=Parameters.m_stagnation,
-        m_flips=Parameters.m_flips,
-
-        n_pool=Parameters.n_pool,
-        m_tops=Parameters.m_tops,
-        n_sel=Parameters.n_sel,
-        n_precisions=Parameters.n_precisions,
-        n_costs=Parameters.n_costs,
-
-        k_mat=Parameters.k_mat,
-        k_mut=Parameters.k_mut,
-
-        location=Parameters.backend_location
-    )
+    backend = search(use_case=Parameters)
     frontend += 'reset', next(backend)
 def ack_play_output():
     print('ack play')
@@ -201,28 +157,7 @@ app = Automaton(
         'pause_state': pause_output
     }
 )
-backend = search(
-    appr=Parameters.appr,
-    bounds=Parameters.bounds,
-
-    alert_costs=Parameters.alert_costs,
-    computation_rate=Parameters.computation_rate,
-    decay_unit=Parameters.decay_unit,
-    input_source=Parameters.method(Parameters.argument),
-
-    m_stagnation=Parameters.m_stagnation,
-    m_flips=Parameters.m_flips,
-    n_pool=Parameters.n_pool,
-    m_tops=Parameters.m_tops,
-    n_sel=Parameters.n_sel,
-    n_precisions=Parameters.n_precisions,
-    n_costs=Parameters.n_costs,
-
-    k_mat=Parameters.k_mat,
-    k_mut=Parameters.k_mut,
-
-    location=Parameters.backend_location
-)
+backend = search(use_case=Parameters)
 frontend = Handler(app)
 
 app += 'init_input'

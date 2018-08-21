@@ -84,7 +84,10 @@ class DynamicGeneticFormula:
             n_costs: dict,
 
             k_mat: float,
-            k_mut: float
+            k_mut: float,
+
+            probability_distributions: dict,
+            byzantine_fault_tolerance: int
         ):
         self.appr: Interval = appr
         self.bounds: tuple = bounds
@@ -105,20 +108,44 @@ class DynamicGeneticFormula:
         self.k_mut: float = k_mut
 
         self.cost_table: dict = {
-            str((0, x)): {'': 0}
+            (0, x): [('', 0)]
             for x in Interval([bounds]).range()
         }
         self.time: int = 1
+        self.elite = []
         self.result = None
+
+        self.probability_distributions: dict = probability_distributions
+        self.byzantine_fault_tolerance: int = byzantine_fault_tolerance
     def __iadd__(self, problem: UncertainByzantineProblem):
-        cnt = 0
+        import time as timer
+        start = None
+        partitions = [(Interval([x]), c) for x, c in self.alert_costs]
+        partitions += [(~Interval([x for x, _ in self.alert_costs]), 0)]
+        i_bounds = Interval([self.bounds])
         for time in range(self.time, self.time + self.computation_rate):
+            cnt = 0
             lmt = 1 + (self.bounds[1][0] - self.bounds[0][0]) * 4 + 4
-            for interval in Interval([self.bounds]).range():
-                #(x for and_interval in problem.or_interval for x in and_interval):
+            time_minus_1 = time - 1
+
+            for x in i_bounds.range():
+                for i, c in partitions:
+                    xi = Interval([x])
+                    if xi in i:
+                        x_minus_1 = ((xi + self.decay_unit) & i_bounds)[0]
+                        self.cost_table[(time, x)] = [([], self.cost_table[(time_minus_1, x_minus_1)][0][1] + c)]
+
+            #d_lower = self.decay_unit[0][0] * time_minus_1
+            #d_open = self.decay_unit[0][1] | time_minus_1 is 0
+            #d_upper = self.decay_unit[1][0] * time_minus_1
+            #d_closed = self.decay_unit[1][1] & time_minus_1 is not 0
+            #decay = ((d_lower, d_open), (d_upper, d_closed))
+            #decay_alert_costs = [((Interval([i]) + decay)[0], c) for i, c in self.alert_costs]
+
+            if (time, self.bounds) not in self.cost_table:
                 genetic.search(
                     time=time,
-                    appr=interval,
+                    appr=self.bounds,
                     cost_table=self.cost_table,
                     n_pool=self.n_pool,
                     m_tops=self.m_tops,
@@ -132,49 +159,91 @@ class DynamicGeneticFormula:
                     n_costs=self.n_costs,
 
                     k_mat=self.k_mat,
-                    k_mut=self.k_mut
+                    k_mut=self.k_mut,
+                    elite=self.elite,
+
+                    probability_distributions=self.probability_distributions,
+                    byzantine_fault_tolerance=self.byzantine_fault_tolerance
                 )
-                #print(str((time, interval)) + ' : ' + str(self.cost_table[str((time, interval))]))
+
+            for interval in Interval([self.bounds]).range():
+                #(x for and_interval in problem.or_interval for x in and_interval):
+                if (time, interval) not in self.cost_table:
+                    genetic.search(
+                        time=time,
+                        appr=interval,
+                        cost_table=self.cost_table,
+                        n_pool=self.n_pool,
+                        m_tops=self.m_tops,
+                        n_sel=self.n_sel,
+                        bounds=self.bounds,
+                        alert_costs=self.alert_costs,
+                        decay_unit=self.decay_unit,
+                        m_stagnation=self.m_stagnation,
+                        m_flips=self.m_flips,
+                        n_precisions=self.n_precisions,
+                        n_costs=self.n_costs,
+
+                        k_mat=self.k_mat,
+                        k_mut=self.k_mut,
+                        elite=self.elite,
+
+                        probability_distributions=self.probability_distributions,
+                        byzantine_fault_tolerance=self.byzantine_fault_tolerance
+                    )
+                #print(str((time, interval)) + ' : ' + str(self.cost_table[(time, interval)]))
                 if cnt is 0:
+                    end = timer.time()
+                    if start is not None: print(end - start)
                     print(str(time) + ': ' + str(interval))
                     lmt -= 4
-
-                    with open('log/test.csv', 'w') as file:
-                        writer = csv.writer(
-                            file,
-                            escapechar='\\',
-                            lineterminator='\n',
-                            quoting=csv.QUOTE_NONE
-                        )
-                        writer.writerow(
-                            ['time till done', 'interval', 'probes', 'cost', 'probes', 'cost', 'probes', 'cost',
-                             'probes',
-                             'cost', 'probes', 'cost'])
-                        for row_key, row_value in self.cost_table.items():
-                            t, s = row_key[1:-1].split(', ', maxsplit=1)
-                            x = literal_eval(s)
-                            i = (
-                                ('{' + str(x[0][0]) + '}')
-                                if not x[0][1] and x[1][1] and x[0][0] == x[1][0]
-                                else
-                                (
-                                    ('(' if x[0][1] else '[') +
-                                    str(float(x[0][0])) +
-                                    '..' +
-                                    str(float(x[1][0])) +
-                                    (']' if x[1][1] else ')')
-                                )
-                            )
-                            writer.writerow([t] + [i] + [x for cell in row_value.items() for x in cell])
-
+                    start = timer.time()
                 cnt += 1
                 cnt %= lmt
+
+            with open('log/cost_table_t_minus_' + str(time) + '_minutes.csv', 'w') as file:
+                writer = csv.writer(
+                    file,
+                    escapechar='\\',
+                    lineterminator='\n',
+                    quoting=csv.QUOTE_NONE
+                )
+                writer.writerow(
+                    ['time till done', 'interval', 'probes', 'cost', 'probes', 'cost', 'probes', 'cost',
+                     'probes',
+                     'cost', 'probes', 'cost'])
+                for c, row_value in sorted(self.cost_table.items(), key=lambda x: x[0]):
+                    t, ((k_lower, k_open), (k_upper, k_closed)) = c
+                    i = (
+                        ('{' + str(k_lower) + '}')
+                        if not k_open and k_closed and k_lower == k_upper
+                        else
+                        (
+                                ('(' if k_open else '[') +
+                                str(float(k_lower)) +
+                                '..' +
+                                str(float(k_upper)) +
+                                (']' if k_closed else ')')
+                        )
+                    )
+                    writer.writerow([t] + [i] + [
+                        x
+                        for probes, cost in row_value
+                        for x in [' '.join([
+                            str(u) + '(' + ' '.join([str(pos) for pos in comb]) + ')'
+                            for u, comb in probes
+                        ]), cost]
+                    ])
 
         self.time += self.computation_rate
 
         # Predict best probe combination
-        comb = [int(z) for x in self.appr for y in self.cost_table[str((self.time, ('(' if x[0][1] else '[') + str(float(x[0][0])) + '..' + str(float(x[1][0])) + (']' if x[1][1] else ')')))] for z in ' '.split(y)]
-        self.result = [(10, 3, index) for index, x in enumerate(comb) if x]
+        self.result = [
+            (self.n_costs[u], u, pos)
+            for x in self.appr
+            for u, comb in self.cost_table[(self.time - 1, x)][0][0]
+            for pos in comb
+        ]
         return self
 class BatchSolution:
     def __init__(
@@ -270,16 +339,16 @@ class BatchSolution:
 
             self.cost = sum(x for x, _, _ in formula.result)
             interval = Interval([])
-            lower_bounds, upper_bounds = self.bounds[0]
+            lower_bounds, upper_bounds = self.bounds
             for location, imprecision, _, does_detect, _ in batch:
                 if does_detect:
                     interval.intervals = [
-                        ((location - imprecision, False), (location + imprecision, True))
+                        ((location - imprecision, True), (location + imprecision, False))
                     ]
                 else:
                     interval.intervals = [
-                        (lower_bounds, (location - imprecision, False)),
-                        ((location + imprecision, True), upper_bounds)
+                        (lower_bounds, (location - imprecision, True)),
+                        ((location + imprecision, False), upper_bounds)
                     ]
                 self.appr &= interval
 
@@ -298,60 +367,41 @@ class BatchSolution:
 
         return self
 
-def search(
-        appr: Interval,
-        bounds: tuple,
-
-        alert_costs: list,
-        decay_unit: tuple,
-        input_source,
-
-        computation_rate: int,
-        m_stagnation: float,
-        m_flips: int,
-
-        n_pool: int,
-        m_tops: int,
-        n_sel: int,
-        n_precisions: list,
-        n_costs: dict,
-
-        k_mat: float,
-        k_mut: float,
-
-        location: int
-):
+def search(use_case):
     solution = BatchSolution(
-        appr=appr,
-        bounds=bounds,
+        appr=use_case.appr,
+        bounds=use_case.bounds,
 
-        input_source=input_source,
+        input_source=use_case.method(use_case.argument),
 
-        location=location
+        location=use_case.backend_location
     )
     problem = UncertainByzantineProblem(
-        alert_costs=alert_costs,
-        decay_unit=decay_unit
+        alert_costs=use_case.alert_costs,
+        decay_unit=use_case.decay_unit
     )
     formula = DynamicGeneticFormula(
-        appr=appr,
-        bounds=bounds,
+        appr=use_case.appr,
+        bounds=use_case.bounds,
 
-        alert_costs=alert_costs,
-        decay_unit=decay_unit,
+        alert_costs=use_case.alert_costs,
+        decay_unit=use_case.decay_unit,
 
-        computation_rate=computation_rate,
-        m_stagnation=m_stagnation,
-        m_flips=m_flips,
+        computation_rate=use_case.computation_rate,
+        m_stagnation=use_case.m_stagnation,
+        m_flips=use_case.m_flips,
 
-        n_pool=n_pool,
-        m_tops=m_tops,
-        n_sel=n_sel,
-        n_precisions=n_precisions,
-        n_costs=n_costs,
+        n_pool=use_case.n_pool,
+        m_tops=use_case.m_tops,
+        n_sel=use_case.n_sel,
+        n_precisions=use_case.n_precisions,
+        n_costs=use_case.n_costs,
 
-        k_mat=k_mat,
-        k_mut=k_mut
+        k_mat=use_case.k_mat,
+        k_mut=use_case.k_mut,
+
+        probability_distributions=use_case.probability_distributions,
+        byzantine_fault_tolerance=use_case.byzantine_fault_tolerance
     )
 
     while True:

@@ -105,6 +105,12 @@ class Interval:
                 del self[-1]
             else:
                 self[-1] = upper, (inf, None)
+
+        removed = 0
+        for x in range(len(self)):
+            if self[x - removed][1] <= self[x - removed][0]:
+                del self[x - removed]
+                removed += 1
     def __ior__(self, other):
         self.intervals += other[:]
 
@@ -127,6 +133,8 @@ class Interval:
         self.intervals = []
         for x in intervals:
             for y in other:
+                #print('x: ' + str(x))
+                #print('y: ' + str(y))
                 lower = (x if y[1] <= x[1] else y)[0]
                 upper = (x if x[0] <= y[0] else y)[1]
 
@@ -169,6 +177,9 @@ class Interval:
                 self.intervals += [x]
         return self
     def __iadd__(self, other):
+        if other == ((0, True), (0, False)):
+            return self
+
         (o_lower, o_open), (o_upper, o_closed) = other
 
         n_self = len(self)
