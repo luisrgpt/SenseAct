@@ -5,7 +5,7 @@ from frontend import Handler
 from backend import search
 
 #from intervals import test
-#from genetic import test
+#from algorithm import test
 #test()
 
 from submarine import Parameters

@@ -19,7 +19,7 @@ class Parameters:
     def method(location):
         while True:
             yield location
-            if location is 0 or location is 100:
+            if location == 0 or location == 100:
                 return
 
             velocity = choice([-location, location])
@@ -33,7 +33,7 @@ class Parameters:
     m_stagnation = 10
     m_flips = 1
 
-    n_pool = 100
+    n_pool = 50
     m_tops = 5
     n_sel = 1
     n_precisions = [

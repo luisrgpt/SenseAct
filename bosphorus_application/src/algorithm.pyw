@@ -3,6 +3,9 @@ from intervals import Interval
 from random import random, randint
 from math import inf
 
+import time as timer
+import csv
+
 def generate(
         useful_probes_range: Interval,
         n_genes: int,
@@ -162,7 +165,7 @@ def evaluate(
             appr_yes = (max(yes[0], appr[0]), min(yes[1], appr[1]))
             yes_prob = (appr_yes[1][0] - appr_yes[0][0]) / n_appr
             if yes_prob == 0:
-                if claims[x] > 1:
+                if 1 < claims[x]:
                     no.remove(appr_yes)
                 continue
 
@@ -520,32 +523,31 @@ def save(
             if (yes if yes[0] <= appr[0] else appr)[1] <= (yes if appr[1] <= yes[1] else appr)[0]:
                 continue
 
-            appr_yes = (max(yes[0], appr[0]), min(yes[1], appr[1]))
-            len_yes = appr_yes[1][0] - appr_yes[0][0]
-            if len_yes == 0:
-                if claims[x] > 1:
-                    for y in range(len(intervals)):
-                        noes[y].remove(appr_yes)
-                continue
-
-            yes_probs = [len_yes / n_appr for n_appr in n_intervals]
             for y in range(len(intervals)):
+                appr_yes = (max(yes[0], intervals[y][0]), min(yes[1], intervals[y][1]))
+                len_yes = appr_yes[1][0] - appr_yes[0][0]
+                if len_yes <= 0:
+                    if 1 < claims[x]:
+                        noes[y].remove(appr_yes)
+                    continue
+
+                yes_prob = len_yes / n_intervals[y]
                 noes[y].remove(appr_yes)
 
-            alert_cost = 0
-            for x, cost in alert_costs:
-                if alert_cost < cost and (appr_yes if x[1] <= appr_yes[1] else x)[0] < (appr_yes if appr_yes[0] <= x[0] else x)[1]:
-                    alert_cost = cost
+                alert_cost = 0
+                for z, cost in alert_costs:
+                    if alert_cost < cost and (appr_yes if z[1] <= appr_yes[1] else z)[0] < (appr_yes if appr_yes[0] <= z[0] else z)[1]:
+                        alert_cost = cost
 
-            delayed_yes = (
-                (appr_yes[0][0] + d_lower, appr_yes[0][1] or d_open),
-                (appr_yes[1][0] + d_upper, appr_yes[1][1] and d_closed)
-            )
-            bounded_yes = (max(delayed_yes[0], bounds[0]), min(delayed_yes[1], bounds[1]))
-            wait_cost = cost_table[(minus_1, bounded_yes)][0][1]
-            for y in range(len(intervals)):
-                total_costs[y] += yes_probs[y] * (alert_cost + wait_cost)
-                no_probs[y] -= yes_probs[y]
+                delayed_yes = (
+                    (appr_yes[0][0] + d_lower, appr_yes[0][1] or d_open),
+                    (appr_yes[1][0] + d_upper, appr_yes[1][1] and d_closed)
+                )
+                bounded_yes = (max(delayed_yes[0], bounds[0]), min(delayed_yes[1], bounds[1]))
+                wait_cost = cost_table[(minus_1, bounded_yes)][0][1]
+
+                total_costs[y] += yes_prob * (alert_cost + wait_cost)
+                no_probs[y] -= yes_prob
 
     for z in range(len(intervals)):
         alert_cost = 0
@@ -568,8 +570,8 @@ def save(
     for y in range(len(intervals)):
         cost_table[(time, intervals[y])] += [(comb, total_costs[y])]
 def search(
+        t_appr: tuple,
         time: int,
-        appr: tuple,
         cost_table: dict,
         n_pool: int,
         m_tops: int,
@@ -590,17 +592,20 @@ def search(
         probability_distributions: dict,
         byzantine_fault_tolerance: int
 ):
+    appr, g_appr = t_appr
+
     # Genetic search is useless if the appr is degenerated
     n_genes = (bounds[1][0] - bounds[0][0]) + 1
-
-    useful_probes_range = Interval([x for x, _ in alert_costs])
-    useful_probes_range &= Interval([appr])
-
     n_appr = appr[1][0] - appr[0][0]
 
+    (appr_lower, _), (appr_upper, _) = appr
     i_bounds = Interval([bounds])
-
-    useful_probes_range = {u: (useful_probes_range + ((-(u - 1), False), ((u - 1), True))) & i_bounds for u, _ in n_precisions}
+    useful_probes_range = Interval([x for x, _ in alert_costs])
+    useful_probes_range &= Interval([((appr_lower, False), (appr_upper, True))])
+    useful_probes_range = {
+        u: (useful_probes_range + ((-(u - 1), False), ((u - 1), True))) & i_bounds
+        for u, _ in n_precisions
+    }
     n_useful_probes = {u: useful_probes_range[u].size() + len(useful_probes_range[u])  for u, _ in n_precisions}
 
     dynamic_fitness = {}
@@ -723,13 +728,55 @@ def search(
 
     elite[:] = pool[:m_tops]
 
+    for x in g_appr:
+        cost_table[(time, x)] = []
+
+    for nucleus in elite:
+        comb = [(u, [pos for pos, cond in enumerate(comb) if cond]) for u, comb in nucleus]
+        save(
+            time=time,
+            appr=appr,
+            cost_table=cost_table,
+            n_pool=n_pool,
+            m_tops=m_tops,
+            n_sel=n_sel,
+            bounds=bounds,
+            alert_costs=alert_costs,
+            decay_unit=decay_unit,
+            m_stagnation=m_stagnation,
+            m_flips=m_flips,
+            nucleus=nucleus,
+            n_precisions=n_precisions,
+            n_costs=n_costs,
+            n_genes=n_genes,
+            k_mat=k_mat,
+            k_mut=k_mut,
+            dynamic_fitness=dynamic_fitness,
+            fitness_key=tuple((u, tuple(pos for pos, cond in enumerate(comb) if cond)) for u, comb in nucleus),
+            elite=elite,
+
+            probability_distributions=probability_distributions,
+            byzantine_fault_tolerance=byzantine_fault_tolerance,
+
+            intervals=g_appr,
+            comb=comb
+        )
+def extrapolate(
+        appr: tuple,
+        time: int,
+        cost_table: dict,
+        decay_unit: tuple,
+        t_minus_1: int,
+        i_bounds: Interval
+):
     i_appr = Interval([appr])
 
     min_cost = inf
     for x in i_appr.range():
         if (time, x) in cost_table:
             nucleus, cost = cost_table[(time, x)][0]
-            if len(nucleus) is 0 and cost < min_cost:
+            nucleus_minus, _ = cost_table[(t_minus_1, ((Interval([x]) + decay_unit) & i_bounds)[0])][0]
+            if len(nucleus_minus) is 0 and len(nucleus) is 0 and cost < min_cost:
                 min_cost = cost
 
     useless_range = Interval([])
@@ -738,12 +785,9 @@ def search(
             useless_range |= Interval([x])
 
     if len(useless_range) is 0:
-        cost_table[(time, appr)] = [
-            ([(u, [pos for pos, cond in enumerate(comb) if cond]) for u, comb in nucleus], fit)
-            for nucleus, fit in zip(elite, fitness[:m_tops])
-        ]
+        return appr, [appr]
 
-    elif 0 < len(useless_range):
+    else:
         i_appr &= ~useless_range
         intervals = []
         s_appr = i_appr[0]
@@ -753,15 +797,107 @@ def search(
             while appr[0] <= s_appr[0]:
                 if (time, s_appr) not in cost_table:
                     intervals += [s_appr]
-                    cost_table[(time, s_appr)] = []
-                s_appr = ((s_appr[0][0] - (not s_appr[0][1]), not s_appr[0][1]) ,s_appr[1])
+                s_appr = ((s_appr[0][0] - (not s_appr[0][1]), not s_appr[0][1]), s_appr[1])
             s_appr = (s_appr[0], (s_appr[1][0] + s_appr[1][1], not s_appr[1][1]))
 
-        for nucleus in elite:
-            comb = [(u, [pos for pos, cond in enumerate(comb) if cond]) for u, comb in nucleus]
-            save(
+        return appr, intervals
+def build(
+    bounds: tuple,
+
+    alert_costs: list,
+    decay_unit: tuple,
+
+    computation_rate: int,
+    m_stagnation: float,
+    m_flips: int,
+    n_pool: int,
+    m_tops: int,
+    n_sel: int,
+    n_precisions: list,
+    n_costs: dict,
+
+    k_mat: float,
+    k_mut: float,
+
+    probability_distributions: dict,
+    byzantine_fault_tolerance: int
+):
+    start = timer.time()
+
+    cost_table = {
+        (0, x): [('', 0)]
+        for x in Interval([bounds]).range()
+    }
+
+    elite = []
+    partitions = [(Interval([x]), c) for x, c in alert_costs]
+    partitions += [(~Interval([x for x, _ in alert_costs]), 0)]
+    i_bounds = Interval([bounds])
+    for time in range(1, computation_rate + 1):
+        time_minus_1 = time - 1
+        l_appr = []
+        excluded = []
+
+        # Get well known costs
+        for x in i_bounds.range():
+            xi = Interval([x])
+            if 0 < len(cost_table[(time_minus_1, ((xi + decay_unit) & i_bounds)[0])][0][0]):
+                continue
+            for i, c in partitions:
+                if xi not in i:
+                    continue
+                x_minus_1 = ((xi + decay_unit) & i_bounds)[0]
+                cost_table[(time, x)] = [([], cost_table[(time_minus_1, x_minus_1)][0][1] + c)]
+                excluded += [x]
+
+        for x in i_bounds.range():
+            if 0 < x[1][0] - x[0][0] or x in excluded:
+                continue
+            xi = Interval([x])
+            for i, c in partitions:
+                if xi not in i:
+                    continue
+                x_minus_1 = ((xi + decay_unit) & i_bounds)[0]
+                cost_table[(time, x)] = [([], cost_table[(time_minus_1, x_minus_1)][0][1] + c)]
+                excluded += [x]
+
+        for appr in reversed(sorted(
+            Interval([bounds]).range(),
+            key=lambda x: x[1][0] - x[0][0] + 0.25 * int(not x[0][1]) + 0.25 * int(x[1][1])
+        )):
+            if appr not in excluded:
+                t_appr = extrapolate(
+                    appr=appr,
+                    time=time,
+                    cost_table=cost_table,
+                    decay_unit=decay_unit,
+                    t_minus_1=time_minus_1,
+                    i_bounds=i_bounds
+                )
+                l_appr += [t_appr]
+                excluded += t_appr[1]
+        l_appr.sort(key=lambda x: x[0])
+
+        end = timer.time()
+        print('extra: ' + str(end - start))
+        start = timer.time()
+
+
+        with open('log/bla' + str(time) + '.csv', 'w') as file:
+            writer = csv.writer(
+                file,
+                escapechar='\\',
+                lineterminator='\n',
+                delimiter=';',
+                quoting=csv.QUOTE_NONE
+            )
+            for x in l_appr:
+                writer.writerow([x[0]] + x[1])
+
+        for t_appr in l_appr:
+            search(
                 time=time,
-                appr=appr,
+                t_appr=t_appr,
                 cost_table=cost_table,
                 n_pool=n_pool,
                 m_tops=m_tops,
@@ -771,39 +907,77 @@ def search(
                 decay_unit=decay_unit,
                 m_stagnation=m_stagnation,
                 m_flips=m_flips,
-                nucleus=nucleus,
                 n_precisions=n_precisions,
                 n_costs=n_costs,
-                n_genes=n_genes,
+
                 k_mat=k_mat,
                 k_mut=k_mut,
-                dynamic_fitness=dynamic_fitness,
-                fitness_key=tuple((u, tuple(pos for pos, cond in enumerate(comb) if cond)) for u, comb in nucleus),
                 elite=elite,
 
                 probability_distributions=probability_distributions,
-                byzantine_fault_tolerance=byzantine_fault_tolerance,
-
-                intervals=intervals,
-                comb=comb
+                byzantine_fault_tolerance=byzantine_fault_tolerance
             )
 
+        with open('log/cost_table_t_minus_' + str(time) + '_minutes.csv', 'w') as file:
+            writer = csv.writer(
+                file,
+                escapechar='\\',
+                lineterminator='\n',
+                quoting=csv.QUOTE_NONE
+            )
+            writer.writerow(
+                ['time till done', 'interval', 'probes', 'cost', 'probes', 'cost', 'probes', 'cost',
+                 'probes',
+                 'cost', 'probes', 'cost'])
+            for c, row_value in sorted(cost_table.items(), key=lambda x: x[0]):
+                t, ((k_lower, k_open), (k_upper, k_closed)) = c
+                i = (
+                    ('{' + str(k_lower) + '}')
+                    if not k_open and k_closed and k_lower == k_upper
+                    else
+                    (
+                            ('(' if k_open else '[') +
+                            str(float(k_lower)) +
+                            '..' +
+                            str(float(k_upper)) +
+                            (']' if k_closed else ')')
+                    )
+                )
+                writer.writerow([t] + [i] + [
+                    x
+                    for probes, cost in row_value
+                    for x in [' '.join([
+                        str(u) + '(' + ' '.join([str(pos) for pos in comb]) + ')'
+                        for u, comb in probes
+                    ]), cost]
+                ])
+
+        end = timer.time()
+        print(end - start)
+        start = timer.time()
+
+    # time += computation_rate
+
+    return cost_table
 def test():
     import time as timer
     from submarine import Parameters
 
     time = 1
-    appr = ((0, False), (71, False)) # [0..71)
+    appr = ((0, False), (41, False)) # [0..41)
     n_appr = appr[1][0] - appr[0][0]
 
     cost_table = {
         (0, x): [('', 0)]
         for x in Interval([Parameters.bounds]).range()
     }
-    nucleus = [(3, [False] * (Interval([Parameters.bounds]).size() + 1)), (5, [False] * (Interval([Parameters.bounds]).size() + 1))]
+    nucleus = [
+        (3, [False] * (Interval([Parameters.bounds]).size() + 1)),
+        (5, [False] * (Interval([Parameters.bounds]).size() + 1))
+    ]
     for pos in []:
         nucleus[0][1][pos] = True
-    for pos in [35, 42, 46, 50, 58, 63, 64, 70]:
+    for pos in [45]:
         nucleus[1][1][pos] = True
 
     n_genes = (Parameters.bounds[1][0] - Parameters.bounds[0][0]) + 1
@@ -811,7 +985,7 @@ def test():
     print('Initial settings: ' + Parameters.__repr__())
     print('appr: ' + str(appr))
     print('k time minus: ' + str(time))
-    print('Set of probes: ' + ' , '.join([str(Interval([((x - 5 ,True), (x + 5,False))])) for x in [35, 42, 46, 50, 58, 63, 64, 70]]))
+    print('Set of probes: ' + ' , '.join([str(Interval([((x - 5 ,True), (x + 5,False))])) for x in [45]]))
 
     time_minus_1 = time - 1
     d_lower = Parameters.decay_unit[0][0] * time_minus_1
@@ -843,7 +1017,10 @@ def test():
         k_mut=Parameters.k_mut,
         dynamic_fitness={},
         fitness_key=tuple((u, tuple(pos for pos, cond in enumerate(comb) if cond)) for u, comb in nucleus),
-        elite=[]
+        elite=[],
+
+        probability_distributions = {},
+        byzantine_fault_tolerance = 0
     ))
     end = timer.time()
     print(end - start)
