@@ -1,11 +1,11 @@
 # coding=utf-8
 
+from algorithm import evaluate
+from ast import literal_eval
+import csv
 from graphs import Graph, Node, Hyperedge
 from intervals import Interval
-import algorithm
-
 from time import strftime
-import csv
 
 class UncertainByzantineProblem:
     def __init__(
@@ -60,6 +60,8 @@ class UncertainByzantineProblem:
 class DynamicGeneticFormula:
     def __init__(
             self,
+            name: str,
+
             appr: Interval,
             bounds: tuple,
 
@@ -81,38 +83,87 @@ class DynamicGeneticFormula:
             probability_distributions: dict,
             byzantine_fault_tolerance: int
         ):
-        self.cost_table: dict = algorithm.build(
-            bounds=bounds,
-    
-            alert_costs=alert_costs,
-            decay_unit=decay_unit,
-    
-            computation_rate=computation_rate,
-            m_stagnation=m_stagnation,
-            m_flips=m_flips,
-    
-            n_pool=n_pool,
-            m_tops=m_tops,
-            n_sel=n_sel,
-            n_precisions=n_precisions,
-            n_costs=n_costs,
-    
-            k_mat=k_mat,
-            k_mut=k_mut,
-    
-            probability_distributions=probability_distributions,
-            byzantine_fault_tolerance=byzantine_fault_tolerance
-        )
+        self.cost_table: dict = {}
+        with open('../share/' + name + '_cost_table_t_minus_' + str(computation_rate) + '_minutes.csv', newline='') as file:
+            reader = csv.reader(
+                file,
+                escapechar='\\',
+                lineterminator='\n',
+                delimiter=';',
+                quoting=csv.QUOTE_NONE
+            )
+            for row in reader:
+                self.cost_table[literal_eval(row[0])] = literal_eval(row[1])
+
         self.n_costs: dict = n_costs
         self.appr = appr
+        self.bounds = bounds
+        self.alert_costs = alert_costs
+        self.decay_unit = decay_unit
+        self.probability_distributions = probability_distributions
+        self.byzantine_fault_tolerance = byzantine_fault_tolerance
         self.time = computation_rate
         self.result = None
+
+        n_bounds = bounds[1][0] - bounds[0][0]
+        self.bounds_distribution = [1 / n_bounds] * n_bounds
+        print(self.bounds_distribution)
     def __iadd__(self, problem: UncertainByzantineProblem):
+        n_dist = len(self.bounds_distribution)
+        new_bounds_distribution = [0] * n_dist
+        new_bounds_distribution[0] += self.bounds_distribution[0] * 1 / 2
+        new_bounds_distribution[1] += self.bounds_distribution[0] * 1 / 2
+        for x in range(1, n_dist - 1):
+            a_third = self.bounds_distribution[x] * 1 / 3
+            new_bounds_distribution[x - 1] += a_third
+            new_bounds_distribution[x] += a_third
+            new_bounds_distribution[x + 1] += a_third
+        new_bounds_distribution[-2] += self.bounds_distribution[-1] * 1 / 2
+        new_bounds_distribution[-1] += self.bounds_distribution[-1] * 1 / 2
+        self.bounds_distribution = new_bounds_distribution
+        total_pb = 0
+        for x in range(n_dist):
+            if Interval([((x, True), (x + 1, False))]) in self.appr:
+                total_pb += self.bounds_distribution[x]
+            else:
+                self.bounds_distribution[x] = 0
+        for x in range(n_dist):
+            if Interval([((x, True), (x + 1, False))]) in self.appr:
+                self.bounds_distribution[x] /= total_pb
+
+        print(str(self.appr) + ' -> ' + str(self.bounds_distribution))
+
+        best_comb = []
+        for appr in self.appr:
+            best_comb += [min(
+                self.cost_table[(self.time, appr)],
+                key=lambda x:
+                    evaluate(
+                        time=self.time,
+                        appr=appr,
+                        cost_table=self.cost_table,
+                        bounds=self.bounds,
+                        alert_costs=self.alert_costs,
+                        decay_unit=self.decay_unit,
+                        nucleus=x[0],
+                        n_costs=self.n_costs,
+
+                        probability_distributions=self.probability_distributions,
+                        byzantine_fault_tolerance=self.byzantine_fault_tolerance,
+
+                        bounds_distribution=self.bounds_distribution,
+
+                        intervals=[appr],
+
+                        convert=False
+                    )[0]
+            )[0]]
+
         # Predict best probe combination
         self.result = [
             (self.n_costs[u], u, pos)
-            for x in self.appr
-            for u, comb in self.cost_table[(self.time, x)][0][0]
+            for x in best_comb
+            for u, comb in x
             for pos in comb
         ]
         return self
@@ -181,7 +232,7 @@ class BatchSolution:
                 csv_content += [does_detect]
                 csv_content += [
                     Interval([
-                        ((location - imprecision - decay, False), (location + imprecision + decay, True))
+                        ((location - imprecision - decay, True), (location + imprecision + decay, False))
                     ])
                     if does_detect
                     else
@@ -208,7 +259,7 @@ class BatchSolution:
         if len(batch) > 0:
             snapshot = Interval(self.appr[:])
 
-            self.cost = sum(x for x, _, _ in formula.result)
+            self.cost += sum(x for x, _, _ in formula.result)
             interval = Interval([])
             lower_bounds, upper_bounds = self.bounds
             for location, imprecision, _, does_detect, _ in batch:
@@ -252,6 +303,8 @@ def search(use_case):
         decay_unit=use_case.decay_unit
     )
     formula = DynamicGeneticFormula(
+        name=use_case.name,
+
         appr=use_case.appr,
         bounds=use_case.bounds,
 
@@ -276,7 +329,7 @@ def search(use_case):
     )
 
     while True:
-        #yield str(solution)
+        yield str(solution)
 
         problem += solution
         formula += problem

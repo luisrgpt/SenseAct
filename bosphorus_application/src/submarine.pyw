@@ -4,8 +4,10 @@ from random import randint, choice
 from intervals import Interval
 
 class Parameters:
-    red_interval = ((40, True), (45, True))
-    yellow_interval = ((45, True), (70, False))
+    name = 'submarine'
+
+    red_interval = ((40, True), (45, False))
+    yellow_interval = ((45, False), (70, False))
     red_cost = 1000
     yellow_cost = 50
 
@@ -19,10 +21,13 @@ class Parameters:
     def method(location):
         while True:
             yield location
-            if location == 0 or location == 100:
-                return
 
-            velocity = choice([-location, location])
+            if location == 0:
+                velocity = 1
+            elif location == 100:
+                velocity = -1
+            else:
+                velocity = choice([-location, location])
             norm = abs(velocity)
 
             normalized_vector = velocity / norm
@@ -37,7 +42,7 @@ class Parameters:
     m_tops = 5
     n_sel = 1
     n_precisions = [
-        (3, 0),
+        (3, 1),
         (5, 1)
     ]
     n_costs = {3: 10, 5: 1}
