@@ -1,7 +1,30 @@
 # coding=utf-8
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
 from math import inf
 from random import randrange
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
 class Interval:
     def __init__(self, intervals: list):
         self.intervals = intervals
@@ -23,7 +46,18 @@ class Interval:
         return self.intervals.__lt__(other.intervals)
     def __le__(self, other):
         return self.intervals.__le__(other.intervals)
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
     def range(self):
         if -inf in self[0][0] or inf in self[-1][1]:
             return
@@ -38,9 +72,32 @@ class Interval:
                 else:
                     lower = (lower[0] + lower[1], not lower[1])
                     upper = (lower[0] + lower[1], not lower[1])
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def size(self):
         return int(sum(x[1][0] - x[0][0] for x in self))
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
     def __contains__(self, other):
         return (
             any(
@@ -58,7 +115,18 @@ class Interval:
                 ) for x in other
             )
         )
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
     def __repr__(self):
         return ' or '.join(
             [
@@ -77,7 +145,18 @@ class Interval:
                 for x in self.intervals
             ]
         ) if len(self) > 0 else '()'
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
     def invert(self):
         if len(self) is 0:
             self.intervals = [
@@ -111,6 +190,18 @@ class Interval:
             if self[x - removed][1] <= self[x - removed][0]:
                 del self[x - removed]
                 removed += 1
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def __ior__(self, other):
         self.intervals += other[:]
 
@@ -128,6 +219,18 @@ class Interval:
                 n_self -= 1
             x += 1
         return self
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def __iand__(self, other):
         intervals = self.intervals
         self.intervals = []
@@ -157,6 +260,18 @@ class Interval:
                 n_self -= 1
             x += 1
         return self
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def remove(self, other: tuple):
         intervals = self.intervals
         self.intervals = []
@@ -176,18 +291,30 @@ class Interval:
             else:
                 self.intervals += [x]
         return self
-    def __iadd__(self, other):
-        if other == ((0, True), (0, False)):
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
+    def __iadd__(self, other: tuple):
+        if other == (0, 0):
             return self
 
-        (o_lower, o_open), (o_upper, o_closed) = other
+        (center, uncertainty) = other
 
         n_self = len(self)
         if n_self is 0:
-            self.intervals += [other]
+            self.intervals += [((center - uncertainty, True), (center + uncertainty, False))]
         elif n_self is 1:
             (s_lower, s_open), (s_upper, s_closed) = self[0]
-            self[0] = ((s_lower + o_lower, s_open or o_open), (s_upper + o_upper, s_closed and o_closed))
+            self[0] = ((s_lower + center - uncertainty, s_open), (s_upper + center + uncertainty, s_closed))
         else:
             n_self -= 1
             x = 0
@@ -197,8 +324,8 @@ class Interval:
                 (x_lower, x_open), (x_upper, x_closed) = self[x]
                 (y_lower, y_open), (y_upper, y_closed) = self[y]
 
-                self[x] = ((x_lower + o_lower, x_open or o_open), (x_upper + o_upper, x_closed and o_closed))
-                self[y] = ((y_lower + o_lower, y_open or o_open), (y_upper + o_upper, y_closed and o_closed))
+                self[x] = ((x_lower + center - uncertainty, x_open), (x_upper + center + uncertainty, x_closed))
+                self[y] = ((y_lower + center - uncertainty, y_open), (y_upper + center + uncertainty, y_closed))
 
                 lower = (self[x] if self[y][1] <= self[x][1] else self[y])[0]
                 upper = (self[x] if self[x][0] <= self[y][0] else self[y])[1]
@@ -209,6 +336,18 @@ class Interval:
                     n_self -= 1
                 x += 1
         return self
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     # def __isub__(self, other):
     #     (o_lower, o_open), (o_upper, o_closed) = other
     #
@@ -231,27 +370,114 @@ class Interval:
     #                 del self[0]
     #                 n_self -= 1
     #     return self
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def __invert__(self):
         result = Interval(self[:])
         result.invert()
         return result
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def __add__(self, other):
         result = Interval(self[:])
         result += other
         return result
-    def __sub__(self, other):
-        result = Interval(self[:])
-        result -= other
-        return result
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
+    # def __sub__(self, other):
+    #     result = Interval(self[:])
+    #     result -= other
+    #     return result
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def __and__(self, other):
         result = Interval(self[:])
         result &= other
         return result
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
     def __or__(self, other):
         result = Interval(self[:])
         result |= other
         return result
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
+def intersects(x: tuple, y: tuple):
+    lower = (x if y[1] <= x[1] else y)[0]
+    upper = (x if x[0] <= y[0] else y)[1]
+    return lower < upper
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
 def random_interval(interval: Interval):
     r = randrange(interval.size() + len(interval.intervals))
 
@@ -261,7 +487,18 @@ def random_interval(interval: Interval):
             return x[0][0] + r
         else:
             r = d
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
 def test():
     for x in Interval([
         ((0, False), (10, True))

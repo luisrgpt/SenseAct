@@ -8,7 +8,7 @@ from submarine import Parameters
 
 start = timer.time()
 
-with open('../share/cost_table_t_minus_' + str(Parameters.computation_rate) + '_minutes.csv', newline='') as csvfile:
+with open('../share/cost_table_t_minus_' + str(Parameters.cost_table_quality) + '_minutes.csv', newline='') as csvfile:
     spamreader = csv.reader(
         csvfile,
         escapechar='\\',

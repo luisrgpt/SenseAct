@@ -1,30 +1,57 @@
 # coding=utf-8
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
+#from intervals import test
+#from algorithm import test
+#test()
 
 from algorithm import build
 from submarine import Parameters
 #from forest_fires import Parameters
+############################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
 build(
     name=Parameters.name,
 
-    bounds=Parameters.bounds,
+    boundaries=Parameters.boundaries,
 
-    alert_costs=Parameters.alert_costs,
-    decay_unit=Parameters.decay_unit,
+    alert_catalog=Parameters.alert_catalog,
+    trajectory_speed=Parameters.trajectory_speed,
 
-    computation_rate=Parameters.computation_rate,
-    m_stagnation=Parameters.m_stagnation,
-    m_flips=Parameters.m_flips,
+    cost_table_quality=Parameters.cost_table_quality,
+    stopping_condition=Parameters.stopping_condition,
+    mutation_probability_of_flipping_bit=Parameters.mutation_probability_of_flipping_bit,
 
-    n_pool=Parameters.n_pool,
-    m_tops=Parameters.m_tops,
-    n_sel=Parameters.n_sel,
-    n_precisions=Parameters.n_precisions,
-    n_costs=Parameters.n_costs,
+    max_size_of_population=Parameters.max_size_of_population,
+    elite_chromosomes=Parameters.elite_chromosomes,
+    selection_max_number_of_fit_chromosomes=Parameters.selection_max_number_of_fit_chromosomes,
+    generation_number_of_initial_probes=Parameters.generation_number_of_initial_probes,
+    probe_catalog=Parameters.probe_catalog,
 
-    k_mat=Parameters.k_mat,
-    k_mut=Parameters.k_mut,
+    selection_base_logarithm=Parameters.selection_base_logarithm,
+    crossover_probability_of_crossover=Parameters.crossover_probability_of_crossover,
+    mutation_probability_of_mutation=Parameters.mutation_probability_of_mutation,
 
-    probability_distributions=Parameters.probability_distributions,
+    probe_success_rate_area=Parameters.probe_success_rate_area,
     byzantine_fault_tolerance=Parameters.byzantine_fault_tolerance
 )

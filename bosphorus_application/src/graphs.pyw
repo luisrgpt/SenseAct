@@ -27,7 +27,7 @@ class Hyperedge:
         return self.targets.__getitem__(key)
 class Node:
     def __init__(self, label):
-        self.label = label
+        self.label = str(label)
         self.edges: dict = {}
     def __iter__(self):
         return self.edges.__iter__()
@@ -61,8 +61,9 @@ class Graph:
         #    edges = dict(reduce(lambda acc, edge: {**acc, **self.nodes[edge.direction].edges}, edges))
 
         for hyperedge in hyperedges:
-            new_nodes = {str(x): Node(x) for x in hyperedge if x not in self}
-            self.nodes = {**self.nodes, **new_nodes}
+            for target in hyperedge:
+                if target not in self:
+                    self.nodes[str(target)] = Node(target)
 
             for source in hyperedge.sources:
                 # Add hyperedge into source
@@ -70,9 +71,9 @@ class Graph:
 
         return self
 
-    def save_into_disk_and_get_file_name(self, directory: str):
+    def export_png(self, directory: str, filename: str):
         dot = graphviz.Graph(
-            filename=str(time.strftime('%Y_%m_%d_%H_%M_%S')),
+            filename=filename,
             directory=directory,
             format='png'
         )
@@ -80,15 +81,31 @@ class Graph:
             dot.node(
                 name=node_label
             )
+
+        legends = []
         for source_label in self:
             for edge_label in self[source_label]:
                 for target_label in self[source_label][edge_label]:
+                    if edge_label in legends:
+                        label = '[' + str(legends.index(edge_label) + 1) + ']'
+                    else:
+                        legends += [edge_label]
+                        label = '[' + str(len(legends)) + ']'
                     dot.edge(
                         tail_name=str(source_label),
                         head_name=str(target_label),
-                        label=edge_label
+                        label=label
                     )
-        dot.render()
+
+        with dot.subgraph(name='Legends', graph_attr={'rankdir': 'LR'}, node_attr={'shape': 'plaintext'}) as sub_dot:
+            for index, label in enumerate(legends):
+                sub_dot.node(
+                    name='[' + str(index + 1) + ']' + ": " + label
+                )
+
+        dot.render(
+            cleanup=True
+        )
 
         return os.path.abspath(dot.directory + '/' + dot.filename + '.' + dot.format)
 
@@ -160,7 +177,7 @@ class Graph:
 #     graph += node2
 #     graph += node3
 #
-#     graph.save_into_disk_and_get_file_name()
+#     graph.export_png()
 #
 #     while(True):
 #         time.sleep(1000)
