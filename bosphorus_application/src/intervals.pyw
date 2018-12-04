@@ -234,13 +234,14 @@ class Interval:
     def __iand__(self, other):
         intervals = self.intervals
         self.intervals = []
+
         for x in intervals:
             for y in other:
-                #print('x: ' + str(x))
-                #print('y: ' + str(y))
+                # Left of the highest
                 lower = (x if y[1] <= x[1] else y)[0]
+                # Right of the lowest
                 upper = (x if x[0] <= y[0] else y)[1]
-
+                # Add interval if intersection exists
                 if lower < upper:
                     self.intervals += [
                         (max(x[0], y[0]), min(x[1], y[1]))

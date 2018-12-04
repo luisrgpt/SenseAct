@@ -115,3 +115,4 @@ class Parameters:
     cost_table_quality = 5
     byzantine_fault_tolerance = 0
 
+    time_limit = 129

@@ -17,6 +17,7 @@ import csv
 from graphs import Graph, Node, Hyperedge
 from intervals import Interval
 from time import strftime, time
+from math import log2
 from datetime import datetime
 from logging import basicConfig, INFO, debug, info
 from random import random, randint, choice
@@ -321,16 +322,16 @@ class DecisionSupportSystem:
         self.byzantine_fault_tolerance = byzantine_fault_tolerance
 
 
-        self.graph: Graph = Graph(
-                node=Node(
-                    label=str(answer_intervals)
-                )
-            )
-        if self.name == "dynamic_programming":
-            self.graph.export_png(
-                directory='./log',
-                filename= self.name + '_' + str(self.turn) + '_00_start_' + self.name
-            )
+        # self.graph: Graph = Graph(
+        #         node=Node(
+        #             label=str(answer_intervals)
+        #         )
+        #     )
+        # if self.name == "dynamic_programming":
+        #     self.graph.export_png(
+        #         directory='./log',
+        #         filename=str(self.turn) + '_00_start_' + self.name
+        #     )
         self.departing_probes = []
         n_boundaries = boundaries[1][0] - boundaries[0][0]
         self.boundaries_distribution = [1 / n_boundaries] * n_boundaries
@@ -404,10 +405,10 @@ class DecisionSupportSystem:
         csv_content += [self.turn]
 
         # Info 3: Graph
-        csv_content += [self.graph.export_png(
-            directory='../../borphorus_interface/user_interface_1_wpf/bin/x64/Debug/AppX',
-            filename=str(time.strftime('%Y_%m_%d_%H_%M_%S'))
-        )]
+        # csv_content += [self.graph.export_png(
+        #     directory='../../borphorus_interface/user_interface_1_wpf/bin/x64/Debug/AppX',
+        #     filename=str(time.strftime('%Y_%m_%d_%H_%M_%S'))
+        # )]
         # Info 4: Measurements
         counter = 0
         for timestamp, batch in enumerate(self.action_history, start=1):
@@ -495,19 +496,19 @@ class DecisionSupportSystem:
         snapshot = Interval(self.answer_intervals[:])
         self.answer_intervals += (0, self.trajectory_speed)
         self.answer_intervals &= Interval([self.boundaries])
-        self.graph += [
-            Hyperedge(
-                sources=[Interval([source]) for source in snapshot if Interval([source]) in Interval([target])],
-                targets=[Interval([target])],
-                weight=0,
-                label='Wait'
-            ) for target in self.answer_intervals
-        ]
-        if self.name == "dynamic_programming":
-            self.graph.export_png(
-                directory='./log',
-                filename=str(self.turn) + '_01_wait_' + self.name
-            )
+        # self.graph += [
+        #     Hyperedge(
+        #         sources=[Interval([source]) for source in snapshot if Interval([source]) in Interval([target])],
+        #         targets=[Interval([target])],
+        #         weight=0,
+        #         label='Wait'
+        #     ) for target in self.answer_intervals
+        # ]
+        # if self.name == "dynamic_programming":
+        #     self.graph.export_png(
+        #         directory='./log',
+        #         filename=str(self.turn) + '_01_wait_' + self.name
+        #     )
 
         # ... or even useless, some minutes after being obtained.
         for timestamp, batch in enumerate(self.action_history):
@@ -652,19 +653,19 @@ class DecisionSupportSystem:
             self.answer_intervals &= current_answer_interval
 
             # Solution 2: Update state
-            self.graph += [
-                Hyperedge(
-                    sources=[Interval([source])],
-                    targets=[Interval([target]) for target in self.answer_intervals if Interval([target]) in Interval([self.measurements])],
-                    weight=self.alert_cost + self.probe_cost,
-                    label=str([(location, imprecision, does_detect) for location, imprecision, _, does_detect, _ in self.measurements])
-                ) for source in snapshot
-            ]
-            if self.name == "dynamic_programming":
-                self.graph.export_png(
-                    directory='./log',
-                    filename=str(self.turn) + '_02_probe_' + self.name
-                )
+            # self.graph += [
+            #     Hyperedge(
+            #         sources=[Interval([source])],
+            #         targets=[Interval([target]) for target in self.answer_intervals if Interval([target]) in Interval([self.measurements])],
+            #         weight=self.alert_cost + self.probe_cost,
+            #         label=str([(location, imprecision, does_detect) for location, imprecision, _, does_detect, _ in self.measurements])
+            #     ) for source in snapshot
+            # ]
+            # if self.name == "dynamic_programming":
+            #     self.graph.export_png(
+            #         directory='./log',
+            #         filename=str(self.turn) + '_02_probe_' + self.name
+            #     )
             self.action_history += [self.measurements]
         else:
             self.action_history += [None]
@@ -723,28 +724,44 @@ class DecisionSupportSystem:
 
         # Step 1: Redistribute probabilistic distribution
         n_dist = len(self.boundaries_distribution)
-        new_boundaries_distribution = [0] * n_dist
-        new_boundaries_distribution[0] += self.boundaries_distribution[0] * 1 / 2
-        new_boundaries_distribution[1] += self.boundaries_distribution[0] * 1 / 2
+        new_boundaries_distribution = [0.0] * n_dist
+        an_half = self.boundaries_distribution[0] / 2.0
+        new_boundaries_distribution[0] += self.boundaries_distribution[0] - an_half
+        new_boundaries_distribution[1] += an_half
         for x in range(1, n_dist - 1):
-            a_third = self.boundaries_distribution[x] * 1 / 3
+            a_third = self.boundaries_distribution[x] / 3.0
             new_boundaries_distribution[x - 1] += a_third
-            new_boundaries_distribution[x] += a_third
+            new_boundaries_distribution[x] += self.boundaries_distribution[x] - a_third - a_third
             new_boundaries_distribution[x + 1] += a_third
-        new_boundaries_distribution[-2] += self.boundaries_distribution[-1] * 1 / 2
-        new_boundaries_distribution[-1] += self.boundaries_distribution[-1] * 1 / 2
+        an_half = self.boundaries_distribution[-1] / 2.0
+        new_boundaries_distribution[-2] += an_half
+        new_boundaries_distribution[-1] += self.boundaries_distribution[-1] - an_half
         self.boundaries_distribution = new_boundaries_distribution
 
         # Step 2: Crop probabilistic distribution
-        total_pb = 0
+        total_pb = 0.0
+        total = 0
         for x in range(n_dist):
             if Interval([((x, True), (x + 1, False))]) in self.answer_intervals:
                 total_pb += self.boundaries_distribution[x]
+                total += 1
             else:
                 self.boundaries_distribution[x] = 0
+        current_total = total_pb
+        # Step 2.a: First adjustment
+        total_pb = 0.0
         for x in range(n_dist):
             if Interval([((x, True), (x + 1, False))]) in self.answer_intervals:
-                self.boundaries_distribution[x] /= total_pb
+                self.boundaries_distribution[x] /= current_total
+                total_pb += self.boundaries_distribution[x]
+        current_total = total_pb
+        # Step 2.b: Second adjustment
+        if current_total != 1.0:
+            for x in range(n_dist):
+                if Interval([((x, True), (x + 1, False))]) in self.answer_intervals:
+                    self.boundaries_distribution[x] += 1 - current_total
+                    current_total += 1 - current_total
+                    break
 
         # Step 3: Pick the best set of probes for each disjunction
         best_comb = []
@@ -781,7 +798,23 @@ class DecisionSupportSystem:
         ]
 
         end = time()
-        #print('[' + self.name + '] ' + str(self.alert_cost) + ', ' + str(self.probe_cost) + ', ' + str(end - start))
+        if self.turn is 0 or log2(self.turn) % 1 == 0:
+            with open('../share/' + self.name + '_' + str(self.turn) + '.csv', 'a') as file:
+                csv\
+                    .writer(
+                        file,
+                        escapechar='\\',
+                        lineterminator='\n',
+                        quoting=csv.QUOTE_NONE
+                    )\
+                    .writerow(
+                        [
+                            repr(self.answer_intervals),
+                            self.alert_cost,
+                            self.probe_cost,
+                            end - start
+                        ]
+                    )
 
         ####################################################
         # Verbose
@@ -863,7 +896,23 @@ class DecisionSupportSystem:
             ]
 
         end = time()
-        #print('[' + self.name + '] ' + str(self.alert_cost) + ', ' + str(self.probe_cost) + ', ' + str(end - start))
+        if self.turn is 0 or log2(self.turn) % 1 == 0:
+            with open('../share/' + self.name + '_' + str(self.turn) + '.csv', 'a') as file:
+                csv\
+                    .writer(
+                        file,
+                        escapechar='\\',
+                        lineterminator='\n',
+                        quoting=csv.QUOTE_NONE
+                    )\
+                    .writerow(
+                        [
+                            repr(self.answer_intervals),
+                            self.alert_cost,
+                            self.probe_cost,
+                            end - start
+                        ]
+                    )
 
         ####################################################
         # Verbose
@@ -940,7 +989,23 @@ class DecisionSupportSystem:
             ]
 
         end = time()
-        #print('[' + self.name + '] ' + str(self.alert_cost) + ', ' + str(self.probe_cost) + ', ' + str(end - start))
+        if self.turn is 0 or log2(self.turn) % 1 == 0:
+            with open('../share/' + self.name + '_' + str(self.turn) + '.csv', 'a') as file:
+                csv\
+                    .writer(
+                        file,
+                        escapechar='\\',
+                        lineterminator='\n',
+                        quoting=csv.QUOTE_NONE
+                    )\
+                    .writerow(
+                        [
+                            repr(self.answer_intervals),
+                            self.alert_cost,
+                            self.probe_cost,
+                            end - start
+                        ]
+                    )
 
         ####################################################
         # Verbose
@@ -1013,7 +1078,23 @@ class DecisionSupportSystem:
             ]
 
         end = time()
-        #print('[' + self.name + '] ' + str(self.alert_cost) + ', ' + str(self.probe_cost) + ', ' + str(end - start))
+        if self.turn is 0 or log2(self.turn) % 1 == 0:
+            with open('../share/' + self.name + '_' + str(self.turn) + '.csv', 'a') as file:
+                csv\
+                    .writer(
+                        file,
+                        escapechar='\\',
+                        lineterminator='\n',
+                        quoting=csv.QUOTE_NONE
+                    )\
+                    .writerow(
+                        [
+                            repr(self.answer_intervals),
+                            self.alert_cost,
+                            self.probe_cost,
+                            end - start
+                        ]
+                    )
 
         ####################################################
         # Verbose
@@ -1048,22 +1129,22 @@ class DecisionSupportSystem:
     def invoke_optimal_algorithm(
             self,
 
-            world
+            oracle
     ):
         cheapest_probe = min(self.probe_catalog.keys(), key=self.probe_catalog.get)
-        ((b_left_point, _), (b_right_point, _)) = world.boundaries
+        ((b_left_point, _), (b_right_point, _)) = oracle.boundaries
 
         start = time()
 
-        if b_left_point <= world.position - cheapest_probe:
-            left_probe_location = world.position - cheapest_probe
-        elif world.position + cheapest_probe <= b_right_point:
-            left_probe_location = world.position + cheapest_probe
+        if b_left_point <= oracle.position - cheapest_probe:
+            left_probe_location = oracle.position - cheapest_probe
+        elif oracle.position + cheapest_probe <= b_right_point:
+            left_probe_location = oracle.position + cheapest_probe
 
-        if b_left_point <= world.position - cheapest_probe:
-            right_probe_location = world.position - cheapest_probe
-        elif world.position + cheapest_probe <= b_right_point:
-            right_probe_location = world.position + cheapest_probe
+        if b_left_point <= oracle.position - cheapest_probe:
+            right_probe_location = oracle.position - cheapest_probe
+        elif oracle.position + cheapest_probe <= b_right_point:
+            right_probe_location = oracle.position + cheapest_probe
 
         self.departing_probes = [
             (self.probe_catalog[cheapest_probe], cheapest_probe, left_probe_location),
@@ -1071,7 +1152,24 @@ class DecisionSupportSystem:
         ]
 
         end = time()
-        #print('[' + self.name + '] ' + str(self.alert_cost) + ', ' + str(self.probe_cost) + ', ' + str(end - start))
+        if self.turn is 0 or log2(self.turn) % 1 == 0:
+            with open('../share/' + self.name + '_' + str(self.turn) + '.csv', 'a') as file:
+                csv\
+                    .writer(
+                        file,
+                        escapechar='\\',
+                        lineterminator='\n',
+                        quoting=csv.QUOTE_NONE
+                    )\
+                    .writerow(
+                        [
+                            repr(self.answer_intervals),
+                            self.alert_cost,
+                            self.probe_cost,
+                            end - start
+                        ]
+                    )
+
         return self
 ############################################################
 
@@ -1205,13 +1303,13 @@ def search(
     )
 
 
-    while True:
+    for _ in range(0, parameters.time_limit):
         # yield dynamic_programming_system.export_csv_content()
 
         # Full-fledged solution
         dynamic_programming_system\
             .import_measurements(
-                source=dynamic_programming_system
+                source=world
             )\
             .invoke_inference_algorithm()\
             .invoke_dynamic_programming_algorithm()
@@ -1223,7 +1321,7 @@ def search(
         # Strawman 1
         greedy_system\
             .import_measurements(
-                source=dynamic_programming_system
+                source=world
             )\
             .invoke_inference_algorithm()\
             .invoke_greedy_algorithm()
@@ -1235,7 +1333,7 @@ def search(
         # Strawman 2
         lazy_system\
             .import_measurements(
-                source=dynamic_programming_system
+                source=world
             )\
             .invoke_inference_algorithm()\
             .invoke_lazy_algorithm()
@@ -1247,7 +1345,7 @@ def search(
         # Strawman 3
         lazy_with_randomness_system\
             .import_measurements(
-                source=dynamic_programming_system
+                source=world
             )\
             .invoke_inference_algorithm()\
             .invoke_lazy_with_randomness_algorithm()
@@ -1259,11 +1357,12 @@ def search(
         # Strawman 4 - Baseline
         optimal_system\
             .import_measurements(
-                source=dynamic_programming_system
+                source=world
             )\
             .invoke_inference_algorithm()\
             .invoke_optimal_algorithm(
-                world)
+                oracle=world
+            )
         world\
             .import_probes(
                 source=lazy_system
