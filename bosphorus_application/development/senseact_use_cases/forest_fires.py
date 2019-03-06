@@ -1,5 +1,5 @@
 from random import randint, choice
-from uncertainty_math import Interval
+from senseact_math import Interval
 
 class Parameters:
   name = 'forest_fires'
@@ -31,26 +31,26 @@ class Parameters:
   stopping_condition = 10
 
   max_number_of_probes = 8
-  max_size_of_population = 50
-  elite_chromosomes = 5
-  generation_number_of_initial_probes = [
+  population_size = 50
+  population_elite_size = 5
+  nucleus_settings = [
     (3, 1),
     (5, 1)
   ]
-  selection_max_number_of_fit_chromosomes = 2
-  selection_base_logarithm = 2
-  crossover_probability_of_crossover = 0.1
-  mutation_probability_of_mutation = 0.1
-  mutation_probability_of_flipping_bit = 0.1
+  population_saved_size = 2
+  select_base_logarithm = 2
+  crossover_probability = 0.1
+  mutate_probability_of_mutate = 0.1
+  mutate_probability_of_flipping_bit = 0.1
 
   alert_cost = 0
   sensor_cost = 0
-  answer_intervals = Interval([((0, False), (100, True))])
+  incident_intervals = Interval([((0, False), (100, True))])
   action_history = []
   turn = 0
 
   boundaries = ((0, False), (100, True))
-  alert_catalog = [
+  alert_settings = [
     (
       red_interval,
       red_cost
@@ -61,9 +61,9 @@ class Parameters:
       yellow_cost
     )
   ]
-  sensor_catalog = {3: 10, 5: 1}
+  sensor_settings = {3: 10, 5: 1}
   sensor_success_rate_area = {3: [1] * 7, 5: [1] * 11}
-  #   alert_catalog = {
+  #   alert_settings = {
   #       'red': {
   #           interval: ((40, True), (45, False)),
   #           cost: 50,
@@ -74,21 +74,21 @@ class Parameters:
   #           cost: 1000,
   #       }
   #   }
-  #   sensor_catalog = {
+  #   sensor_settings = {
   #       'expensive': {
   #           uncertainty: 3,
   #           cost: 10,
-  #           generation_number_of_initial_probes: 1,
+  #           nucleus_settings: 1,
   #           sensor_success_rate_area: [1]*7,
   #       },
   #
   #       'cheap': {
   #           uncertainty: 5,
   #           cost: 1,
-  #           generation_number_of_initial_probes: 1,
+  #           nucleus_settings: 1,
   #           sensor_success_rate_area: [1]*11,
   #       }
   #   }
-  trajectory_speed = 1
+  target_settings = 1
   cost_table_quality = 5
   byzantine_fault_tolerance = 0

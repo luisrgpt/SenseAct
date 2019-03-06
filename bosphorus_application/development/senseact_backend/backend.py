@@ -1,7 +1,7 @@
-from uncertainty_evaluation import evaluation
+from senseact_evaluation import evaluate
 from ast import literal_eval
 import csv
-from uncertainty_math import Interval
+from senseact_math import Interval
 from time import strftime, time
 from math import log2
 from datetime import datetime
@@ -212,19 +212,19 @@ class DecisionSupportSystem:
       # State
       alert_cost,
       sensor_cost,
-      answer_intervals,
+      incident_intervals,
       action_history,
       turn,
 
       # Parameters
       boundaries,
-      alert_catalog,
+      alert_settings,
       sensor_success_rate_area,
-      trajectory_speed,
+      target_settings,
       cost_table_quality,
       byzantine_fault_tolerance,
 
-      sensor_catalog
+      sensor_settings
   ):
     # Log
     self.name = name
@@ -232,21 +232,21 @@ class DecisionSupportSystem:
     # State
     self.alert_cost = alert_cost
     self.sensor_cost = sensor_cost
-    self.answer_intervals = answer_intervals
+    self.incident_intervals = incident_intervals
     self.action_history = action_history
     self.turn = turn
 
     # Parameters
     self.boundaries = boundaries
-    self.alert_catalog = alert_catalog
+    self.alert_settings = alert_settings
     self.sensor_success_rate_area = sensor_success_rate_area
-    self.trajectory_speed = trajectory_speed
+    self.target_settings = target_settings
     self.cost_table_quality = cost_table_quality
     self.byzantine_fault_tolerance = byzantine_fault_tolerance
 
     # self.graph: Graph = Graph(
     #         node=Node(
-    #             label=str(answer_intervals)
+    #             label=str(incident_intervals)
     #         )
     #     )
     # if self.name == "dynamic_programming":
@@ -257,7 +257,7 @@ class DecisionSupportSystem:
     self.departing_probes = []
     n_boundaries = boundaries[1][0] - boundaries[0][0]
     self.boundaries_distribution = [1 / n_boundaries] * n_boundaries
-    self.sensor_catalog = sensor_catalog
+    self.sensor_settings = sensor_settings
     self.measurements = []
     self.current_alert = (None, 0)
 
@@ -271,23 +271,23 @@ class DecisionSupportSystem:
     name:                      '{0}'
     alert_cost:                {1}
     sensor_cost:                {2}
-    answer_intervals:          '{3}'
+    incident_intervals:          '{3}'
     action_history:
     turn:          {4}
     boundaries:                '{5}'
-    alert_catalog:
+    alert_settings:
     sensor_success_rate_area:
-    trajectory_speed:
+    target_settings:
     cost_table_quality:
     byzantine_fault_tolerance: {6}
     graph:
     departing_probes:
     boundaries_distribution:
-    sensor_catalog:""".format(
+    sensor_settings:""".format(
       self.name,
       self.alert_cost,
       self.sensor_cost,
-      self.answer_intervals,
+      self.incident_intervals,
       self.turn,
       self.boundaries,
       self.byzantine_fault_tolerance
@@ -304,7 +304,7 @@ class DecisionSupportSystem:
     csv_content += [0]
     csv_content += [self.turn]
     csv_content += [self.alert_cost + self.sensor_cost]
-    csv_content += [self.answer_intervals]
+    csv_content += [self.incident_intervals]
 
     # Info 2: Environment
     csv_content += [1234]
@@ -384,27 +384,30 @@ class DecisionSupportSystem:
 
     # ... unmeasured intervals may involve costly alerts,...
     alert_cost = 0
-    for answer_intervals_yes in self.answer_intervals:
-      for x, cost in self.alert_catalog:
+    for incident_intervals_yes in self.incident_intervals:
+      for x, cost in self.alert_settings:
         if alert_cost < cost and \
-            (answer_intervals_yes if x[1] <= answer_intervals_yes[1] else x)[
+            (
+            incident_intervals_yes if x[1] <= incident_intervals_yes[1] else x)[
               0] < \
-            (answer_intervals_yes if answer_intervals_yes[0] <= x[0] else x)[1]:
+            (
+            incident_intervals_yes if incident_intervals_yes[0] <= x[0] else x)[
+              1]:
           alert_cost = cost
           self.current_alert = (x, cost)
     self.alert_cost += alert_cost
 
     # ... while every measurement gets less accurate...
-    snapshot = Interval(self.answer_intervals[:])
-    self.answer_intervals += (0, self.trajectory_speed)
-    self.answer_intervals &= Interval([self.boundaries])
+    snapshot = Interval(self.incident_intervals[:])
+    self.incident_intervals += (0, self.target_settings)
+    self.incident_intervals &= Interval([self.boundaries])
     # self.graph += [
     #     Hyperedge(
     #         sources=[Interval([source]) for source in snapshot if Interval([source]) in Interval([target])],
     #         targets=[Interval([target])],
     #         weight=0,
     #         label='Wait'
-    #     ) for target in self.answer_intervals
+    #     ) for target in self.incident_intervals
     # ]
     # if self.name == "dynamic_programming":
     #     self.graph.export_png(
@@ -416,7 +419,7 @@ class DecisionSupportSystem:
     for timestamp, batch in enumerate(self.action_history):
       if not batch:
         continue
-      decay = (self.turn - timestamp) * self.trajectory_speed
+      decay = (self.turn - timestamp) * self.target_settings
       for index, probe in enumerate(batch):
         if not probe:
           continue
@@ -523,7 +526,7 @@ class DecisionSupportSystem:
 
     if len(self.measurements) > 0:
       # Solution 1: Generate result
-      snapshot = Interval(self.answer_intervals[:])
+      snapshot = Interval(self.incident_intervals[:])
 
       current_answer_interval = Interval([])
       lower_boundaries, upper_boundaries = self.boundaries
@@ -537,13 +540,13 @@ class DecisionSupportSystem:
             (lower_boundaries, (location - imprecision, True)),
             ((location + imprecision, False), upper_boundaries)
           ]
-      self.answer_intervals &= current_answer_interval
+      self.incident_intervals &= current_answer_interval
 
       # Solution 2: Update state
       # self.graph += [
       #     Hyperedge(
       #         sources=[Interval([source])],
-      #         targets=[Interval([target]) for target in self.answer_intervals if Interval([target]) in Interval([self.measurements])],
+      #         targets=[Interval([target]) for target in self.incident_intervals if Interval([target]) in Interval([self.measurements])],
       #         weight=self.alert_cost + self.sensor_cost,
       #         label=str([(location, imprecision, does_detect) for location, imprecision, _, does_detect, _ in self.measurements])
       #     ) for source in snapshot
@@ -624,7 +627,7 @@ class DecisionSupportSystem:
     total_pb = 0.0
     total = 0
     for x in range(n_dist):
-      if Interval([((x, True), (x + 1, False))]) in self.answer_intervals:
+      if Interval([((x, True), (x + 1, False))]) in self.incident_intervals:
         total_pb += self.boundaries_distribution[x]
         total += 1
       else:
@@ -633,39 +636,39 @@ class DecisionSupportSystem:
     # Step 2.a: First adjustment
     total_pb = 0.0
     for x in range(n_dist):
-      if Interval([((x, True), (x + 1, False))]) in self.answer_intervals:
+      if Interval([((x, True), (x + 1, False))]) in self.incident_intervals:
         self.boundaries_distribution[x] /= current_total
         total_pb += self.boundaries_distribution[x]
     current_total = total_pb
     # Step 2.b: Second adjustment
     if current_total != 1.0:
       for x in range(n_dist):
-        if Interval([((x, True), (x + 1, False))]) in self.answer_intervals:
+        if Interval([((x, True), (x + 1, False))]) in self.incident_intervals:
           self.boundaries_distribution[x] += 1 - current_total
           current_total += 1 - current_total
           break
 
     # Step 3: Pick the best set of probes for each disjunction
     best_comb = []
-    for answer_intervals in self.answer_intervals:
+    for incident_intervals in self.incident_intervals:
       best_comb += [min(
-        self.cost_table[(self.cost_table_quality, answer_intervals)],
+        self.cost_table[(self.cost_table_quality, incident_intervals)],
         key=lambda x:
-        evaluation(
+        evaluate(
           time=self.cost_table_quality,
           cost_table=self.cost_table,
           boundaries=self.boundaries,
-          alert_catalog=self.alert_catalog,
-          trajectory_speed=self.trajectory_speed,
+          alert_settings=self.alert_settings,
+          target_settings=self.target_settings,
           nucleus=x[0],
-          sensor_catalog=self.sensor_catalog,
+          sensor_settings=self.sensor_settings,
 
           sensor_success_rate_area=self.sensor_success_rate_area,
           byzantine_fault_tolerance=self.byzantine_fault_tolerance,
 
           boundaries_distributions=[self.boundaries_distribution],
 
-          answer_intervals=[answer_intervals],
+          incident_intervals=[incident_intervals],
 
           convert=False
         )[0]
@@ -673,7 +676,7 @@ class DecisionSupportSystem:
 
     # Step 4: Prepare probe information
     self.departing_probes = [
-      (self.sensor_catalog[u], u, pos)
+      (self.sensor_settings[u], u, pos)
       for x in best_comb
       for u, comb in x
       for pos in comb
@@ -692,7 +695,7 @@ class DecisionSupportSystem:
         ) \
           .writerow(
           [
-            repr(self.answer_intervals),
+            repr(self.incident_intervals),
             self.alert_cost,
             self.sensor_cost,
             end - start
@@ -742,9 +745,9 @@ class DecisionSupportSystem:
     )
     ####################################################
 
-    cheapest_probe = min(self.sensor_catalog.keys(),
-                         key=self.sensor_catalog.get)
-    ((a_left_point, _), (a_right_point, _)) = self.answer_intervals[0]
+    cheapest_probe = min(self.sensor_settings.keys(),
+                         key=self.sensor_settings.get)
+    ((a_left_point, _), (a_right_point, _)) = self.incident_intervals[0]
     ((b_left_point, _), (b_right_point, _)) = self.boundaries
 
     start = time()
@@ -752,7 +755,7 @@ class DecisionSupportSystem:
     if self.turn == 0:
       # Step 1: Send as many probes as possible
       self.departing_probes = [
-        (self.sensor_catalog[cheapest_probe], cheapest_probe, x)
+        (self.sensor_settings[cheapest_probe], cheapest_probe, x)
         for x in range(0, 101)
       ]
 
@@ -769,9 +772,9 @@ class DecisionSupportSystem:
         right_sensor_location = a_right_point + cheapest_probe
 
       self.departing_probes = [
-        (self.sensor_catalog[cheapest_probe], cheapest_probe,
+        (self.sensor_settings[cheapest_probe], cheapest_probe,
          left_sensor_location),
-        (self.sensor_catalog[cheapest_probe], cheapest_probe,
+        (self.sensor_settings[cheapest_probe], cheapest_probe,
          right_sensor_location)
       ]
 
@@ -788,7 +791,7 @@ class DecisionSupportSystem:
         ) \
           .writerow(
           [
-            repr(self.answer_intervals),
+            repr(self.incident_intervals),
             self.alert_cost,
             self.sensor_cost,
             end - start
@@ -837,29 +840,29 @@ class DecisionSupportSystem:
     )
     ####################################################
 
-    cheapest_probe = min(self.sensor_catalog.keys(),
-                         key=self.sensor_catalog.get)
+    cheapest_probe = min(self.sensor_settings.keys(),
+                         key=self.sensor_settings.get)
     outside_alert = (
       ~Interval([self.current_alert[0]])
       if self.current_alert[0] is not None
-      else Interval([x for x, _ in self.alert_catalog])
+      else Interval([x for x, _ in self.alert_settings])
     )
-    ((a_left_point, _), (a_right_point, _)) = self.answer_intervals[0]
+    ((a_left_point, _), (a_right_point, _)) = self.incident_intervals[0]
 
     start = time()
 
     if self.turn == 0:
       # Step 1: Send as many probes as possible
       self.departing_probes = [
-        (self.sensor_catalog[cheapest_probe], cheapest_probe, x)
+        (self.sensor_settings[cheapest_probe], cheapest_probe, x)
         for x in range(0, 101)
       ]
 
-    elif len((self.answer_intervals + (
-        0, self.trajectory_speed)) & outside_alert) > 0:
+    elif len((self.incident_intervals + (
+        0, self.target_settings)) & outside_alert) > 0:
       # Step 2: Send as many probes as possible after a certain period of time
       self.departing_probes = [
-        (self.sensor_catalog[cheapest_probe], cheapest_probe, x)
+        (self.sensor_settings[cheapest_probe], cheapest_probe, x)
         for x in range(int(a_left_point), int(a_right_point) + 1)
       ]
 
@@ -876,7 +879,7 @@ class DecisionSupportSystem:
         ) \
           .writerow(
           [
-            repr(self.answer_intervals),
+            repr(self.incident_intervals),
             self.alert_cost,
             self.sensor_cost,
             end - start
@@ -925,7 +928,7 @@ class DecisionSupportSystem:
   #         )
   #         ####################################################
   #
-  #         cheapest_probe = min(self.sensor_catalog.keys(), key=self.sensor_catalog.get)
+  #         cheapest_probe = min(self.sensor_settings.keys(), key=self.sensor_settings.get)
   #         ((b_left_point, _), (b_right_point, _)) = self.boundaries
   #
   #         start = time()
@@ -933,15 +936,15 @@ class DecisionSupportSystem:
   #         if self.turn == 0:
   #             # Send as many probes as possible
   #             self.departing_probes = [
-  #                 (self.sensor_catalog[cheapest_probe], cheapest_probe, x)
+  #                 (self.sensor_settings[cheapest_probe], cheapest_probe, x)
   #                 for x in range(0, 101)
   #             ]
   #
   #         else:
   #
   #             self.departing_probes = [
-  #                 (self.sensor_catalog[u], u, randint(b_left_point, b_right_point))
-  #                 for u in [choice(list(self.sensor_catalog.keys()))]
+  #                 (self.sensor_settings[u], u, randint(b_left_point, b_right_point))
+  #                 for u in [choice(list(self.sensor_settings.keys()))]
   #                 for _ in range(0, randint(0, b_right_point - b_left_point + 1))
   #             ]
   #
@@ -957,7 +960,7 @@ class DecisionSupportSystem:
   #                     )\
   #                     .writerow(
   #                         [
-  #                             repr(self.answer_intervals),
+  #                             repr(self.incident_intervals),
   #                             self.alert_cost,
   #                             self.sensor_cost,
   #                             end - start
@@ -990,8 +993,8 @@ class DecisionSupportSystem:
 
       oracle
   ):
-    cheapest_probe = min(self.sensor_catalog.keys(),
-                         key=self.sensor_catalog.get)
+    cheapest_probe = min(self.sensor_settings.keys(),
+                         key=self.sensor_settings.get)
     ((b_left_point, _), (b_right_point, _)) = oracle.boundaries
 
     start = time()
@@ -1007,9 +1010,9 @@ class DecisionSupportSystem:
       right_sensor_location = oracle.position + cheapest_probe
 
     self.departing_probes = [
-      (self.sensor_catalog[cheapest_probe], cheapest_probe,
+      (self.sensor_settings[cheapest_probe], cheapest_probe,
        left_sensor_location),
-      (self.sensor_catalog[cheapest_probe], cheapest_probe,
+      (self.sensor_settings[cheapest_probe], cheapest_probe,
        right_sensor_location)
     ]
 
@@ -1026,7 +1029,7 @@ class DecisionSupportSystem:
         ) \
           .writerow(
           [
-            repr(self.answer_intervals),
+            repr(self.incident_intervals),
             self.alert_cost,
             self.sensor_cost,
             end - start
@@ -1059,19 +1062,19 @@ def search(
     # State
     alert_cost=0,
     sensor_cost=0,
-    answer_intervals=Interval([((0, False), (100, True))]),
+    incident_intervals=Interval([((0, False), (100, True))]),
     action_history=[],
     turn=0,
 
     # Parameters
     boundaries=parameters.boundaries,
-    alert_catalog=parameters.alert_catalog,
+    alert_settings=parameters.alert_settings,
     sensor_success_rate_area=parameters.sensor_success_rate_area,
-    trajectory_speed=parameters.trajectory_speed,
+    target_settings=parameters.target_settings,
     cost_table_quality=parameters.cost_table_quality,
     byzantine_fault_tolerance=parameters.byzantine_fault_tolerance,
 
-    sensor_catalog=parameters.sensor_catalog
+    sensor_settings=parameters.sensor_settings
   )
   greedy_system = DecisionSupportSystem(
     # Log
@@ -1080,19 +1083,19 @@ def search(
     # State
     alert_cost=0,
     sensor_cost=0,
-    answer_intervals=Interval([((0, False), (100, True))]),
+    incident_intervals=Interval([((0, False), (100, True))]),
     action_history=[],
     turn=0,
 
     # Parameters
     boundaries=parameters.boundaries,
-    alert_catalog=parameters.alert_catalog,
+    alert_settings=parameters.alert_settings,
     sensor_success_rate_area=parameters.sensor_success_rate_area,
-    trajectory_speed=parameters.trajectory_speed,
+    target_settings=parameters.target_settings,
     cost_table_quality=parameters.cost_table_quality,
     byzantine_fault_tolerance=parameters.byzantine_fault_tolerance,
 
-    sensor_catalog=parameters.sensor_catalog
+    sensor_settings=parameters.sensor_settings
   )
   lazy_system = DecisionSupportSystem(
     # Log
@@ -1101,19 +1104,19 @@ def search(
     # State
     alert_cost=0,
     sensor_cost=0,
-    answer_intervals=Interval([((0, False), (100, True))]),
+    incident_intervals=Interval([((0, False), (100, True))]),
     action_history=[],
     turn=0,
 
     # Parameters
     boundaries=parameters.boundaries,
-    alert_catalog=parameters.alert_catalog,
+    alert_settings=parameters.alert_settings,
     sensor_success_rate_area=parameters.sensor_success_rate_area,
-    trajectory_speed=parameters.trajectory_speed,
+    target_settings=parameters.target_settings,
     cost_table_quality=parameters.cost_table_quality,
     byzantine_fault_tolerance=parameters.byzantine_fault_tolerance,
 
-    sensor_catalog=parameters.sensor_catalog
+    sensor_settings=parameters.sensor_settings
   )
   # lazy_with_randomness_system = DecisionSupportSystem(
   #     # Log
@@ -1122,19 +1125,19 @@ def search(
   #     # State
   #     alert_cost=0,
   #     sensor_cost=0,
-  #     answer_intervals=Interval([((0, False), (100, True))]),
+  #     incident_intervals=Interval([((0, False), (100, True))]),
   #     action_history=[],
   #     turn=0,
   #
   #     # Parameters
   #     boundaries=parameters.boundaries,
-  #     alert_catalog=parameters.alert_catalog,
+  #     alert_settings=parameters.alert_settings,
   #     sensor_success_rate_area=parameters.sensor_success_rate_area,
-  #     trajectory_speed=parameters.trajectory_speed,
+  #     target_settings=parameters.target_settings,
   #     cost_table_quality=parameters.cost_table_quality,
   #     byzantine_fault_tolerance=parameters.byzantine_fault_tolerance,
   #
-  #     sensor_catalog=parameters.sensor_catalog
+  #     sensor_settings=parameters.sensor_settings
   # )
   optimal_system = DecisionSupportSystem(
     # Log
@@ -1143,19 +1146,19 @@ def search(
     # State
     alert_cost=0,
     sensor_cost=0,
-    answer_intervals=Interval([((0, False), (100, True))]),
+    incident_intervals=Interval([((0, False), (100, True))]),
     action_history=[],
     turn=0,
 
     # Parameters
     boundaries=parameters.boundaries,
-    alert_catalog=parameters.alert_catalog,
+    alert_settings=parameters.alert_settings,
     sensor_success_rate_area=parameters.sensor_success_rate_area,
-    trajectory_speed=parameters.trajectory_speed,
+    target_settings=parameters.target_settings,
     cost_table_quality=parameters.cost_table_quality,
     byzantine_fault_tolerance=parameters.byzantine_fault_tolerance,
 
-    sensor_catalog=parameters.sensor_catalog
+    sensor_settings=parameters.sensor_settings
   )
 
   for _ in range(0, parameters.time_limit):

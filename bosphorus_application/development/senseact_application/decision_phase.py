@@ -1,5 +1,5 @@
-from uncertainty_backend.backend import search
-from uncertainty_use_cases.submarine import Parameters
+from senseact_backend.backend import search
+from senseact_use_cases.submarine import Parameters
 
 ############################################################
 

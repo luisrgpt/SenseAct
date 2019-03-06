@@ -1,4 +1,4 @@
-from .evaluation import evaluation
+from .evaluate import evaluate
 from .get_claims import get_claims
 from .get_answers import get_answers
 from .get_measurement_cost import get_measurement_cost

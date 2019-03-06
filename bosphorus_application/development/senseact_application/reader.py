@@ -2,7 +2,7 @@ import time as timer
 import csv
 from ast import literal_eval
 
-from uncertainty_use_cases.submarine import Parameters
+from senseact_use_cases.submarine import Parameters
 
 start = timer.time()
 

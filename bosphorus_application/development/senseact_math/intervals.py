@@ -7,7 +7,7 @@ from random import randrange
 ############################################################
 class Interval:
 
-  def __init__(self, intervals: list):
+  def __init__(self, intervals):
     self.intervals = intervals
 
   def __iter__(self):
@@ -19,8 +19,8 @@ class Interval:
   def __setitem__(self, key, value):
     return self.intervals.__setitem__(key, value)
 
-  def __delitem__(self, key):
-    return self.intervals.__delitem__(key)
+  def __dpopulation_elitem__(self, key):
+    return self.intervals.__dpopulation_elitem__(key)
 
   def __len__(self):
     return self.intervals.__len__()

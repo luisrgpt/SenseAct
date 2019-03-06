@@ -1,8 +1,6 @@
-from uncertainty_typing import Claim
-
 def get_claims(
     nucleus
-) -> Claim:
+):
   # Get maximum length from minimum and maximum position
   maximum_length = len(nucleus[0])
 
@@ -15,4 +13,4 @@ def get_claims(
         proclaims[max(center - radius, 0)] += 1
         disclaims[min(center + radius, maximum_length - 1)] += 1
 
-  return Claim(zip(proclaims, disclaims))
+  return zip(proclaims, disclaims)

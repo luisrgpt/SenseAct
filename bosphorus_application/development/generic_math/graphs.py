@@ -64,7 +64,7 @@ class Graph:
     #    raise DisconnectedGraphException('Node ' + str(new_node.id) + ' is disconnected from graph')
 
     # Acyclic Graph => new node does not point to itself
-    # Therefore: (by uncertainty_dynamic_programming) new node points to itself => Cyclic Graph => raise exception
+    # Therefore: (by senseact_dynamic_programming) new node points to itself => Cyclic Graph => raise exception
     # edges = dict(new_node.edges)
     # while(len(edges) > 0):
     #    edges = dict(filter(lambda edge: str(edge.direction) in self.nodes, edges))

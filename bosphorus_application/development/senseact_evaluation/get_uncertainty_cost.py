@@ -1,16 +1,14 @@
-from uncertainty_math import intersects
+from senseact_math import intersects
 
 def get_uncertainty_cost(
     uncertainty,
-    alert_catalog,
     cost_table,
-    next_unit_time,
-    trajectory_speed
+    settings
 ):
   # Get alert cost from uncertainty and alert catalog
   alert_cost = next(
     alert_cost
-    for alert_interval, alert_cost in alert_catalog
+    for alert_interval, alert_cost in settings.alert.tpyes
     for partial_uncertainty_interval, _ in uncertainty
     if intersects(partial_uncertainty_interval, alert_interval)
   )
@@ -23,9 +21,9 @@ def get_uncertainty_cost(
   # Get wait cost from uncertainty, cost table, trajectory speed and next unit
   # time
   for uncertainty_interval, partial_uncertainty_probability in uncertainty:
-    uncertainty_interval[0][0] -= trajectory_speed
-    uncertainty_interval[1][0] += trajectory_speed
-    wait_cost = cost_table[(next_unit_time, uncertainty_interval)][0][1]
+    uncertainty_interval[0][0] -= settings.target.speed
+    uncertainty_interval[1][0] += settings.target.speed
+    wait_cost = cost_table[uncertainty_interval][0][1]
     uncertainty_cost += partial_uncertainty_probability * wait_cost
 
   return uncertainty_cost
