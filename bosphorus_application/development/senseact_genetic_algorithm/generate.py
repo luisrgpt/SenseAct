@@ -2,16 +2,17 @@ from random import \
   random
 
 def generate(
-    population_elite,
+    population,
     minimum: int,
     maximum: int,
+    amount: int,
     settings
 ):
-  chromosome_useful_size = maximum - minimum
+  chromosome_size = maximum - minimum
 
   population_empty = [
     [
-      (chromosome_type, [False] * settings.chromosome.size)
+      (chromosome_type, amount * [False])
       for chromosome_type, _ in settings.chromosome.types
     ]
   ]
@@ -20,17 +21,12 @@ def generate(
     # Generate random nucleus
     nucleus = []
     for chromosome_type, chromosome_initial_size in settings.chromosome.types:
-      chromosome_minimum = minimum - chromosome_type
-      chromosome_maximum = maximum - chromosome_type
-      gene_probability = chromosome_initial_size / chromosome_useful_size
+      gene_probability = chromosome_initial_size / chromosome_size
       # Create random chromosome
-      chromosome_genes = [
-        chromosome_minimum <= gene <= chromosome_maximum and
-        random() < gene_probability
-        for gene in range(settings.chromosome.size)
-      ]
+      chromosome_genes = [random() < gene_probability for _ in range(amount)]
       chromosome = (chromosome_type, chromosome_genes)
 
       nucleus += [chromosome]
     population_random += [nucleus]
-  return population_elite + population_empty + population_random
+  population += population_empty + population_random
+  return population

@@ -3,47 +3,35 @@ from typing import \
 
 def get_answers(
     claims,
-    minimum: int,
-    maximum: int,
-    probability_mass_function: List[float]
+    minimum: float,
+    maximum: float,
+    probability_mass_function: List[float] = None
 ):
-  chromosome_useful_size = maximum - minimum
-  # Store initial settings from claims for next iteration
-  proclaim, disclaim = claims[0]
-  previous_position = 0
-  previous_claim = proclaim - disclaim
-  previous_endpoint = (0, False)
+  chromosome_size = maximum - minimum
+
+  # Store initial settings from claims for the following iteration
+  (previous_position, (previous_claim, _)), *claims = sorted(claims.items())
+  previous_endpoint = [previous_position, False]
+
   # Get certainties and uncertainties from claims
-  current_claim = 0
   certainty = []
   uncertainty = []
-  for position, proclaim, disclaim in enumerate(claims[1:], 1):
+  for position, (claim, included) in claims:
     # Get endpoint from subset of claims
-    claim_variation = proclaim - disclaim
-    current_claim += claim_variation
-    claim_is_negative = current_claim < previous_claim
-    endpoint = \
-      (position, True) if position is len(claims) - 1 else \
-        (position, claim_is_negative) if claim_variation else \
-          (position, False) if proclaim else \
-            None
+    endpoint = [position, included and claim < 0]
 
-    if not endpoint:
-      continue
     # Get answer from previous and current settings
-    answer_interval = (previous_endpoint, endpoint)
-    answer_probability = (position - previous_position) / chromosome_useful_size
-    answer_uncertainty = previous_claim is 0
-    answer = (answer_interval, answer_probability, answer_uncertainty)
+    answer_interval = [previous_endpoint, endpoint]
+    answer_probability = (position - previous_position) / chromosome_size
+    answer = (answer_interval, answer_probability)
 
     if previous_claim:
       certainty += [answer]
     else:
       uncertainty += [answer]
-    # Store current settings from subset of claims for next iteration
+
+    # Store current settings from subset of claims for the following iteration
     previous_position = position
-    previous_claim = current_claim
-    previous_endpoint = \
-      (position, True) if proclaim else \
-        endpoint
+    previous_claim += claim
+    previous_endpoint = endpoint if included else [position, True]
   return certainty, uncertainty

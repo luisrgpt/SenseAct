@@ -11,9 +11,6 @@ class Automaton:
   def __iadd__(self, input_name: str):
     if input_name not in self.state_transitions:
       return
-      # raise AutomatonException(
-      #     'Input ' + input_name + ' does not apply in state ' + self.current_state
-      # )
 
     while input_name is not None:
       next_state = self.state_transitions[input_name]

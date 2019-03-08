@@ -1,16 +1,30 @@
 def get_claims(
-    nucleus
+    nucleus,
+    minimum: float,
+    maximum: float,
+    amount: int
 ):
-  # Get maximum length from minimum and maximum position
-  maximum_length = len(nucleus[0])
+  # Get relevant positions
+  chromosome_size: float = maximum - minimum
+  positions = [
+    chromosome_size * chromosome_position / amount
+    for chromosome_position in range(1, amount + 1)
+  ]
 
-  # Get proclaims and disclaims from probes and maximum length
-  proclaims = [0] * maximum_length
-  disclaims = [0] * maximum_length
-  for radius, comb in nucleus:
-    for center, probe_is_inserted_in_this_position in enumerate(comb):
-      if probe_is_inserted_in_this_position:
-        proclaims[max(center - radius, 0)] += 1
-        disclaims[min(center + radius, maximum_length - 1)] += 1
+  # Get claims
+  claims = {}
+  for radius, chromosome in nucleus:
+    for position, flipped in zip(positions, chromosome):
+      if flipped:
+        proclaim_position = max(minimum, position - radius)
+        disclaim_position = min(position + radius, maximum)
+        if proclaim_position not in claims:
+          claims[proclaim_position] = [0, True]
+        if disclaim_position not in claims:
+          claims[disclaim_position] = [0, True]
+        if claims[disclaim_position][0] > 0:
+          claims[proclaim_position][1] = False
+        claims[proclaim_position][0] += 1
+        claims[disclaim_position][0] -= 1
 
-  return zip(proclaims, disclaims)
+  return claims

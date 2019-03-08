@@ -7,26 +7,29 @@ from senseact_evaluation import \
   evaluate
 
 def search(
-    population_elite,
+    population,
     minimum: int,
     maximum: int,
-    probability_mass_function: List[float],
+    amount: int,
     cost_table,
-    settings
+    settings,
+    probability_mass_function: List[float] = None,
 ):
   population = generate(
-    population_elite=population_elite,
+    population=population,
     minimum=minimum,
     maximum=maximum,
+    amount=amount,
     settings=settings.genetic_algorithm.generate
   )
   population_fitness = evaluate(
     population=population,
     minimum=minimum,
     maximum=maximum,
-    probability_mass_function=probability_mass_function,
+    amount=amount,
     cost_table=cost_table,
-    settings=settings.scenario
+    settings=settings.scenario,
+    probability_mass_function=probability_mass_function
   )
   prev_best = min(population_fitness)
   stagnation_counter = 0
@@ -35,17 +38,15 @@ def search(
     population = evolve(
       population=population,
       population_fitness=population_fitness,
-      minimum=minimum,
-      maximum=maximum,
       settings=settings.genetic_algorithm
     )
     population_fitness = evaluate(
       population=population,
       minimum=minimum,
       maximum=maximum,
-      probability_mass_function=probability_mass_function,
       cost_table=cost_table,
-      settings=settings.scenario
+      settings=settings.scenario,
+      probability_mass_function=probability_mass_function
     )
     # Update test
     next_best = min(population_fitness)
@@ -57,4 +58,5 @@ def search(
     population[x]
     for x, _ in sorted(enumerate(population_fitness), key=lambda x: x[1])
   ]
-  population_elite[:] = population[:len(population_elite)]
+  population[:] = \
+    population[:settings.genetic_algorithm.generate.population.elite_size]

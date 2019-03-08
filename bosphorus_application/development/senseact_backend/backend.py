@@ -652,7 +652,7 @@ class DecisionSupportSystem:
     best_comb = []
     for incident_intervals in self.incident_intervals:
       best_comb += [min(
-        self.cost_table[(self.cost_table_quality, incident_intervals)],
+        self.cost_table[self.cost_table_quality, incident_intervals],
         key=lambda x:
         evaluate(
           time=self.cost_table_quality,

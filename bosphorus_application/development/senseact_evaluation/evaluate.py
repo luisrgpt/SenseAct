@@ -9,16 +9,20 @@ from senseact_evaluation import \
 
 def evaluate(
     population,
-    minimum: int,
-    maximum: int,
-    probability_mass_function: List[float],
+    minimum: float,
+    maximum: float,
+    amount: int,
     cost_table,
-    settings
+    settings,
+    probability_mass_function: List[float] = None
 ):
   fitness = []
   for nucleus in population:
     claims = get_claims(
-      nucleus=nucleus
+      nucleus=nucleus,
+      minimum=minimum,
+      maximum=maximum,
+      amount=amount
     )
     certainty, uncertainty = get_answers(
       claims=claims,

@@ -1,4 +1,5 @@
-from senseact_math import intersects
+from senseact_math import \
+  intersects
 
 def get_uncertainty_cost(
     uncertainty,

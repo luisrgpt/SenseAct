@@ -5,8 +5,6 @@ from random import \
 
 def mutate(
     chromosome: List[bool],
-    minimum: int,
-    maximum: int,
     probability: float,
     flip_probability: float
 ):
@@ -15,13 +13,12 @@ def mutate(
     return
 
   flipped_size = sum(chromosome)
-  useful_size = maximum - minimum
-  flip_true_probability = flip_probability * (flipped_size + 1) / useful_size
-  flip_false_probability = flip_probability * (1 - flipped_size / useful_size)
+  size = len(chromosome)
+  flip_true_probability = flip_probability * (flipped_size + 1) / size
+  flip_false_probability = flip_probability * (1 - flipped_size / size)
 
-  for position in range(minimum, maximum + 1):
+  for position, gene in enumerate(chromosome):
     random_event = random()
-    gene = chromosome[position]
 
     chromosome[position] = \
       True if not gene and flip_true_probability < random_event else \
