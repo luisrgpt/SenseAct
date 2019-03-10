@@ -36,7 +36,7 @@ def build(
     )
     extrapolation_groups = group_by_extrapolation(
       excluded=excluded,
-      useless_partitions=useless_partitions
+      settings=settings.scenario.boundaries
     )
     proximity_groups = group_by_proximity(
       groups=extrapolation_groups

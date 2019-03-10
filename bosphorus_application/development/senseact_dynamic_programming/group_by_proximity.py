@@ -3,6 +3,7 @@ def group_by_proximity(
 ):
   groups = sorted(groups, key=lambda x: x[1] - x[0])
 
+  # Identify all possible common denominators
   amounts = {}
   key_pairs = []
   key_pairs_size = 0
@@ -14,6 +15,7 @@ def group_by_proximity(
     key_pairs += [[lower_key, upper_key]]
     key_pairs_size += 1
 
+  # Group by common denominators. Remove the least frequent common denominators
   proximity_groups = {}
   for amount_key, amount_value in sorted(amounts.items(), key=lambda x: x[1]):
     if not key_pairs_size:
