@@ -9,7 +9,7 @@ def get_uncertainty_cost(
   # Get alert cost from uncertainty and alert catalog
   alert_cost = next(
     alert_cost
-    for alert_interval, alert_cost in settings.alert.tpyes
+    for alert_interval, alert_cost in settings.alert.types
     for partial_uncertainty_interval, _ in uncertainty
     if intersects(partial_uncertainty_interval, alert_interval)
   )
@@ -24,7 +24,7 @@ def get_uncertainty_cost(
   for uncertainty_interval, partial_uncertainty_probability in uncertainty:
     uncertainty_interval[0][0] -= settings.target.speed
     uncertainty_interval[1][0] += settings.target.speed
-    wait_cost = cost_table[uncertainty_interval][0][1]
+    (_, wait_cost), *_ = cost_table[uncertainty_interval]
     uncertainty_cost += partial_uncertainty_probability * wait_cost
 
   return uncertainty_cost

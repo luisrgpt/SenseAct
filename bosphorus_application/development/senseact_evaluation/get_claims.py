@@ -7,8 +7,8 @@ def get_claims(
   # Get relevant positions
   chromosome_size: float = maximum - minimum
   positions = [
-    chromosome_size * chromosome_position / amount
-    for chromosome_position in range(1, amount + 1)
+    minimum + chromosome_size * chromosome_position / (amount - 1)
+    for chromosome_position in range(amount)
   ]
 
   # Get claims

@@ -18,6 +18,6 @@ def get_certainty_cost(
     # Get wait cost
     certainty_interval[0][0] -= settings.target.speed
     certainty_interval[1][0] += settings.target.speed
-    wait_cost = cost_table[certainty_interval][0][1]
+    (_, wait_cost), *_ = cost_table[certainty_interval]
     certainty_cost += partial_certainty_probability * wait_cost
   return certainty_cost
